@@ -44,6 +44,7 @@ export interface Topic {
 export interface Worksheet {
   id: string;
   studentId: string;
+  subject: Subject;
   status: WorksheetStatus;
   score?: number;
   createdAt: Timestamp;

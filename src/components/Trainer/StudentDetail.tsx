@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import { ArrowBack, Assignment } from '@mui/icons-material';
 import { getUser, getSubjectData, getUserSubjects } from '../../services/users';
-import { getCompletedWorksheets } from '../../services/worksheets';
+import { getRecentWorksheets } from '../../services/worksheets';
 import { User, SubjectData, Worksheet, Subject } from '../../types';
 import Assignments from '../Student/Assignments';
 import RecentWorksheets from '../Student/RecentWorksheets';
@@ -41,11 +41,7 @@ const StudentDetail: React.FC = () => {
         const userSubjects = await getUserSubjects(studentId);
         setSubjects(userSubjects);
 
-        const [studentData, completedWorksheets] = await Promise.all([
-          getUser(studentId),
-          getCompletedWorksheets(studentId, 10),
-        ]);
-
+        const studentData = await getUser(studentId);
         setStudent(studentData);
 
         if (userSubjects.length === 0) {
@@ -58,6 +54,11 @@ const StudentDetail: React.FC = () => {
           userSubjects.map((subject) => getSubjectData(studentId, subject))
         );
 
+        // Load worksheets for each subject
+        const worksheetsPromises = await Promise.all(
+          userSubjects.map((subject) => getRecentWorksheets(studentId, subject, 10))
+        );
+
         // Create maps
         const dataMap = new Map<Subject, SubjectData>();
         const worksheetsMap = new Map<Subject, Worksheet[]>();
@@ -67,8 +68,7 @@ const StudentDetail: React.FC = () => {
           if (data) {
             dataMap.set(subject, data);
           }
-          // For now, show all worksheets for all subjects
-          worksheetsMap.set(subject, completedWorksheets);
+          worksheetsMap.set(subject, worksheetsPromises[index]);
         });
 
         setSubjectsData(dataMap);

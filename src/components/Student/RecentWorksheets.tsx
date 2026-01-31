@@ -12,6 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Worksheet } from '../../types';
 import { formatWorksheetDate } from '../../utils/dateUtils';
+import { Timestamp } from 'firebase/firestore';
 
 interface RecentWorksheetsProps {
   worksheets: Worksheet[];
@@ -56,47 +57,80 @@ const RecentWorksheets: React.FC<RecentWorksheetsProps> = ({
 
         {worksheets.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-            No completed worksheets yet
+            No worksheets yet
           </Typography>
         ) : (
           <List sx={{ pt: 1 }}>
-            {worksheets.map((worksheet) => (
-              <ListItem
-                key={worksheet.id}
-                button
-                onClick={() => handleWorksheetClick(worksheet.id)}
-                sx={{
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  mb: 1,
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                    borderColor: 'primary.main',
-                  },
-                  transition: 'all 0.2s',
-                }}
-              >
-                <ListItemText
-                  primary={`Worksheet ${worksheet.id.slice(0, 8)}`}
-                  secondary={formatWorksheetDate(worksheet.completedAt)}
-                />
-                {worksheet.score !== undefined && (
-                  <Chip
-                    label={`${Math.round(worksheet.score)}%`}
-                    color={
-                      worksheet.score >= 80
-                        ? 'success'
-                        : worksheet.score >= 60
-                        ? 'warning'
-                        : 'error'
-                    }
-                    size="small"
-                    sx={{ ml: 1 }}
+            {worksheets.map((worksheet) => {
+              const isPending = worksheet.status === 'pending';
+              const displayDate = isPending 
+                ? formatWorksheetDate(worksheet.createdAt)
+                : formatWorksheetDate(worksheet.completedAt);
+
+              return (
+                <ListItem
+                  key={worksheet.id}
+                  button
+                  onClick={() => handleWorksheetClick(worksheet.id)}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    mb: 1,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                      borderColor: 'primary.main',
+                    },
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <ListItemText
+                    primary={`Worksheet ${worksheet.id.slice(0, 8)}`}
+                    secondary={displayDate}
                   />
-                )}
-              </ListItem>
-            ))}
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    {isPending ? (
+                      <Chip
+                        label="pending"
+                        color="warning"
+                        size="small"
+                        sx={{
+                          backgroundColor: '#ffc107',
+                          color: '#000',
+                          fontWeight: 600,
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <Chip
+                          label={displayDate}
+                          color="success"
+                          size="small"
+                          sx={{
+                            backgroundColor: '#4caf50',
+                            color: '#fff',
+                            fontWeight: 600,
+                          }}
+                        />
+                        {worksheet.score !== undefined && (
+                          <Chip
+                            label={`${Math.round(worksheet.score)}%`}
+                            color={
+                              worksheet.score >= 80
+                                ? 'success'
+                                : worksheet.score >= 60
+                                ? 'warning'
+                                : 'error'
+                            }
+                            size="small"
+                          />
+                        )}
+                      </>
+                    )}
+                  </Box>
+                </ListItem>
+              );
+            })}
           </List>
         )}
       </CardContent>

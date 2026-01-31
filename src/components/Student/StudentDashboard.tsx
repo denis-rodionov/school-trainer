@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Typography, CircularProgress, Alert, Tabs, Tab } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSubjectData, getUserSubjects } from '../../services/users';
-import { getCompletedWorksheets } from '../../services/worksheets';
+import { getRecentWorksheets } from '../../services/worksheets';
 import { Subject, SubjectData, Worksheet } from '../../types';
 import Assignments from './Assignments';
 import RecentWorksheets from './RecentWorksheets';
@@ -40,10 +40,14 @@ const StudentDashboard: React.FC = () => {
         }
 
         // Load data for all subjects
-        const [completedWorksheets, ...subjectDataPromises] = await Promise.all([
-          getCompletedWorksheets(currentUser.uid, 10),
-          ...userSubjects.map((subject) => getSubjectData(currentUser.uid, subject)),
-        ]);
+        const subjectDataPromises = await Promise.all(
+          userSubjects.map((subject) => getSubjectData(currentUser.uid, subject))
+        );
+
+        // Load worksheets for each subject
+        const worksheetsPromises = await Promise.all(
+          userSubjects.map((subject) => getRecentWorksheets(currentUser.uid, subject, 10))
+        );
 
         // Create maps
         const dataMap = new Map<Subject, SubjectData>();
@@ -54,8 +58,7 @@ const StudentDashboard: React.FC = () => {
           if (data) {
             dataMap.set(subject, data);
           }
-          // For now, show all worksheets for all subjects (can be improved later)
-          worksheetsMap.set(subject, completedWorksheets);
+          worksheetsMap.set(subject, worksheetsPromises[index]);
         });
 
         setSubjectsData(dataMap);

@@ -15,12 +15,17 @@ import {
   Snackbar,
   Alert,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import { Delete } from '@mui/icons-material';
-import { SubjectData, Subject, Topic } from '../../types';
+import { SubjectData, Subject, Topic, Exercise } from '../../types';
 import { getTopic } from '../../services/topics';
 import { formatWorksheetDate } from '../../utils/dateUtils';
 import { updateSubjectTopicAssignments } from '../../services/users';
+import { createWorksheet, getPendingWorksheetBySubject } from '../../services/worksheets';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { extractGaps } from '../../utils/markdownParser';
 
 interface AssignmentsProps {
   subject: Subject;
@@ -39,10 +44,13 @@ const Assignments: React.FC<AssignmentsProps> = ({
   studentId: propStudentId,
   onUpdate,
 }) => {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [topics, setTopics] = useState<Map<string, Topic>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
   const subjectName = subject.charAt(0).toUpperCase() + subject.slice(1);
 
   useEffect(() => {
@@ -75,6 +83,68 @@ const Assignments: React.FC<AssignmentsProps> = ({
 
     loadTopics();
   }, [subjectData]);
+
+  const handlePractice = async () => {
+    if (!currentUser || !subjectData || !subjectData.topicAssignments.length) {
+      return;
+    }
+
+    try {
+      setGeneratingWorksheet(true);
+
+      // Check for pending worksheet
+      const pendingWorksheet = await getPendingWorksheetBySubject(currentUser.uid, subject);
+      
+      if (pendingWorksheet) {
+        navigate(`/worksheet/${pendingWorksheet.id}`);
+        return;
+      }
+
+      // Create exercises from topic assignments
+      const exercises: Omit<Exercise, 'id'>[] = [];
+      let exerciseOrder = 0;
+
+      for (const assignment of subjectData.topicAssignments) {
+        const topic = topics.get(assignment.topicId);
+        if (!topic) continue;
+
+        // For each assignment, create the specified number of exercises
+        // Since exercises need to be created manually, we'll create placeholder exercises
+        // The trainer will need to manually create exercises with proper markdown and gaps
+        for (let i = 0; i < assignment.count; i++) {
+          // Create a simple placeholder exercise
+          // In a real implementation, this would use AI to generate from the topic's prompt
+          // For now, create a basic template that trainers can edit
+          const placeholderMarkdown = `${topic.taskDescription}\n\nExercise ${i + 1}: Please fill in the blank: ___`;
+          const gaps = extractGaps(placeholderMarkdown);
+          
+          exercises.push({
+            topicId: topic.id,
+            topicShortName: topic.shortName,
+            markdown: placeholderMarkdown,
+            correctAnswers: gaps.length > 0 ? gaps : ['answer'],
+            order: exerciseOrder++,
+          });
+        }
+      }
+
+      if (exercises.length === 0) {
+        alert('No exercises could be generated. Please contact your trainer.');
+        return;
+      }
+
+      // Create worksheet
+      const worksheetId = await createWorksheet(currentUser.uid, subject, exercises);
+      
+      // Navigate to worksheet page
+      navigate(`/worksheet/${worksheetId}`);
+    } catch (err: any) {
+      console.error('Failed to create worksheet:', err);
+      alert(err.message || 'Failed to create worksheet');
+    } finally {
+      setGeneratingWorksheet(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -121,7 +191,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
           <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
             No topics assigned yet
           </Typography>
-          {!isReadOnly && onPractice && (
+          {onPractice && (
             <Button
               variant="contained"
               color="primary"
@@ -290,12 +360,13 @@ const Assignments: React.FC<AssignmentsProps> = ({
           })}
         </List>
 
-        {!isReadOnly && onPractice && (
+        {onPractice && (
           <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
             <Button
               variant="contained"
               color="primary"
-              onClick={() => onPractice(subject)}
+              onClick={handlePractice}
+              disabled={generatingWorksheet}
               sx={{
                 py: 1.5,
                 px: 4,
@@ -303,8 +374,9 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 fontWeight: 600,
                 borderRadius: 2,
               }}
+              startIcon={generatingWorksheet ? <CircularProgress size={20} color="inherit" /> : null}
             >
-              Practice
+              {generatingWorksheet ? 'Generating...' : 'Practice'}
             </Button>
           </Box>
         )}

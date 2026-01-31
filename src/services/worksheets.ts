@@ -48,27 +48,26 @@ export const getPendingWorksheetBySubject = async (
   const q = query(
     collection(db, 'worksheets'),
     where('studentId', '==', studentId),
+    where('subject', '==', subject),
     where('status', '==', 'pending')
+    // Note: orderBy removed temporarily until index is built
+    // Will get the most recent by sorting in memory
   );
   
   const worksheetsSnapshot = await getDocs(q);
-  const worksheets = worksheetsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
-  
-  // Check if any pending worksheet has exercises for the subject
-  for (const worksheet of worksheets) {
-    const exercises = await getExercises(worksheet.id);
-    if (exercises.length > 0) {
-      const firstExercise = await getExercise(worksheet.id, exercises[0].id);
-      if (firstExercise) {
-        const topic = await import('./topics').then((m) => m.getTopic(firstExercise.topicId));
-        if (topic && topic.subject === subject) {
-          return worksheet;
-        }
-      }
-    }
+  if (worksheetsSnapshot.empty) {
+    return null;
   }
   
-  return null;
+  // Get the most recent pending worksheet
+  const worksheets = worksheetsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
+  worksheets.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+    const bTime = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+    return bTime - aTime;
+  });
+  
+  return worksheets[0];
 };
 
 export const getCompletedWorksheets = async (
@@ -87,8 +86,60 @@ export const getCompletedWorksheets = async (
   return worksheetsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
 };
 
+export const getRecentWorksheets = async (
+  studentId: string,
+  subject: Subject,
+  count: number = 10
+): Promise<Worksheet[]> => {
+  // Get both pending and completed worksheets for the specific subject
+  const [pendingQuery, completedQuery] = await Promise.all([
+    getDocs(
+      query(
+        collection(db, 'worksheets'),
+        where('studentId', '==', studentId),
+        where('subject', '==', subject),
+        where('status', '==', 'pending')
+        // Note: orderBy removed temporarily until index is built
+        // Will sort in memory instead
+      )
+    ),
+    getDocs(
+      query(
+        collection(db, 'worksheets'),
+        where('studentId', '==', studentId),
+        where('subject', '==', subject),
+        where('status', '==', 'completed')
+        // Note: orderBy removed temporarily until index is built
+        // Will sort in memory instead
+      )
+    )
+  ]);
+
+  const pending = pendingQuery.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
+  const completed = completedQuery.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
+
+  // Sort pending by createdAt in memory (descending)
+  pending.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+    const bTime = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+    return bTime - aTime;
+  });
+
+  // Sort completed by completedAt in memory (descending)
+  completed.sort((a, b) => {
+    const aTime = a.completedAt?.toMillis?.() || (a.completedAt?.seconds ? a.completedAt.seconds * 1000 : 0) || 0;
+    const bTime = b.completedAt?.toMillis?.() || (b.completedAt?.seconds ? b.completedAt.seconds * 1000 : 0) || 0;
+    return bTime - aTime;
+  });
+
+  // Combine and sort: pending first, then completed by date
+  const all = [...pending, ...completed];
+  return all.slice(0, count);
+};
+
 export const createWorksheet = async (
   studentId: string,
+  subject: Subject,
   exercises: Omit<Exercise, 'id'>[]
 ): Promise<string> => {
   const batch = writeBatch(db);
@@ -96,6 +147,7 @@ export const createWorksheet = async (
   // Create worksheet document
   const worksheetData = {
     studentId,
+    subject,
     status: 'pending' as WorksheetStatus,
     createdAt: Timestamp.now(),
   };

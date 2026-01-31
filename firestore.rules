@@ -41,10 +41,26 @@ service cloud.firestore {
       
       // Exercises subcollection: same rules as parent
       match /exercises/{exerciseId} {
+        // Helper to check if user owns the parent worksheet
+        function ownsParentWorksheet() {
+          // Check if parent worksheet exists
+          let worksheet = get(/databases/$(database)/documents/worksheets/$(worksheetId));
+          return worksheet.data.studentId == request.auth.uid;
+        }
+        
+        // For batch creates: if parent doesn't exist yet, allow if authenticated
+        // (the parent worksheet creation rule will ensure studentId matches)
+        function canCreateInBatch() {
+          return !exists(/databases/$(database)/documents/worksheets/$(worksheetId)) && 
+                 request.auth != null;
+        }
+        
         allow read: if request.auth != null && 
-          (get(/databases/$(database)/documents/worksheets/$(worksheetId)).data.studentId == request.auth.uid || isTrainer());
-        allow write: if request.auth != null && 
-          (get(/databases/$(database)/documents/worksheets/$(worksheetId)).data.studentId == request.auth.uid || isTrainer());
+          (ownsParentWorksheet() || isTrainer());
+        allow create: if request.auth != null && 
+          (canCreateInBatch() || ownsParentWorksheet() || isTrainer());
+        allow update, delete: if request.auth != null && 
+          (ownsParentWorksheet() || isTrainer());
       }
     }
   }
