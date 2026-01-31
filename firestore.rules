@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is trainer
+    function isTrainer() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'trainer';
+    }
+    
+    // Users: read own, trainers can read all
+    match /users/{userId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == userId || isTrainer());
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Subjects subcollection: same rules as parent
+      match /subjects/{subjectId} {
+        allow read: if request.auth != null && 
+          (request.auth.uid == userId || isTrainer());
+        allow write: if request.auth != null && 
+          (request.auth.uid == userId || isTrainer());
+      }
+    }
+    
+    // Topics: trainers can write, all authenticated can read
+    match /topics/{topicId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isTrainer();
+    }
+    
+    // Worksheets: students can read/write own, trainers can read all
+    match /worksheets/{worksheetId} {
+      allow read: if request.auth != null && 
+        (resource.data.studentId == request.auth.uid || isTrainer());
+      allow create: if request.auth != null && 
+        (request.resource.data.studentId == request.auth.uid || isTrainer());
+      allow update: if request.auth != null && 
+        (resource.data.studentId == request.auth.uid || isTrainer());
+      allow delete: if request.auth != null && 
+        (resource.data.studentId == request.auth.uid || isTrainer());
+      
+      // Exercises subcollection: same rules as parent
+      match /exercises/{exerciseId} {
+        allow read: if request.auth != null && 
+          (get(/databases/$(database)/documents/worksheets/$(worksheetId)).data.studentId == request.auth.uid || isTrainer());
+        allow write: if request.auth != null && 
+          (get(/databases/$(database)/documents/worksheets/$(worksheetId)).data.studentId == request.auth.uid || isTrainer());
+      }
+    }
+  }
+}
