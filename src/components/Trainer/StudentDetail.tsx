@@ -6,23 +6,29 @@ import {
   CircularProgress,
   Alert,
   Button,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { ArrowBack } from '@mui/icons-material';
-import { getUser, getSubjectData } from '../../services/users';
+import { ArrowBack, Assignment } from '@mui/icons-material';
+import { getUser, getSubjectData, getUserSubjects } from '../../services/users';
 import { getCompletedWorksheets } from '../../services/worksheets';
-import { User, SubjectData, Worksheet } from '../../types';
-import SubjectBlock from '../Student/SubjectBlock';
+import { User, SubjectData, Worksheet, Subject } from '../../types';
+import Assignments from '../Student/Assignments';
+import RecentWorksheets from '../Student/RecentWorksheets';
+import AssignTopicsDialog from './AssignTopicsDialog';
+import { getTopics } from '../../services/topics';
 
 const StudentDetail: React.FC = () => {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
   const [student, setStudent] = useState<User | null>(null);
-  const [mathData, setMathData] = useState<SubjectData | null>(null);
-  const [germanData, setGermanData] = useState<SubjectData | null>(null);
-  const [mathWorksheets, setMathWorksheets] = useState<Worksheet[]>([]);
-  const [germanWorksheets, setGermanWorksheets] = useState<Worksheet[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectsData, setSubjectsData] = useState<Map<Subject, SubjectData>>(new Map());
+  const [worksheets, setWorksheets] = useState<Map<Subject, Worksheet[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [tabValue, setTabValue] = useState(0);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!studentId) return;
@@ -30,20 +36,43 @@ const StudentDetail: React.FC = () => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [studentData, mathSubjectData, germanSubjectData, completedWorksheets] =
-          await Promise.all([
-            getUser(studentId),
-            getSubjectData(studentId, 'math'),
-            getSubjectData(studentId, 'german'),
-            getCompletedWorksheets(studentId, 10),
-          ]);
+        
+        // Get all subjects for this user
+        const userSubjects = await getUserSubjects(studentId);
+        setSubjects(userSubjects);
+
+        const [studentData, completedWorksheets] = await Promise.all([
+          getUser(studentId),
+          getCompletedWorksheets(studentId, 10),
+        ]);
 
         setStudent(studentData);
-        setMathData(mathSubjectData);
-        setGermanData(germanSubjectData);
-        // Show all worksheets for both subjects (simplified)
-        setMathWorksheets(completedWorksheets);
-        setGermanWorksheets(completedWorksheets);
+
+        if (userSubjects.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        // Load data for all subjects
+        const subjectDataPromises = await Promise.all(
+          userSubjects.map((subject) => getSubjectData(studentId, subject))
+        );
+
+        // Create maps
+        const dataMap = new Map<Subject, SubjectData>();
+        const worksheetsMap = new Map<Subject, Worksheet[]>();
+
+        userSubjects.forEach((subject, index) => {
+          const data = subjectDataPromises[index];
+          if (data) {
+            dataMap.set(subject, data);
+          }
+          // For now, show all worksheets for all subjects
+          worksheetsMap.set(subject, completedWorksheets);
+        });
+
+        setSubjectsData(dataMap);
+        setWorksheets(worksheetsMap);
       } catch (err: any) {
         setError(err.message || 'Failed to load student data');
       } finally {
@@ -54,9 +83,40 @@ const StudentDetail: React.FC = () => {
     loadData();
   }, [studentId]);
 
-  const handlePractice = () => {
-    // Practice button is disabled for trainers, but we can show a message
-    alert('Trainers cannot practice. This is a read-only view.');
+  const handleAssignClick = () => {
+    setAssignDialogOpen(true);
+  };
+
+  const handleAssignSave = () => {
+    // Reload data
+    if (!studentId) return;
+    const loadData = async () => {
+      try {
+        const userSubjects = await getUserSubjects(studentId);
+        setSubjects(userSubjects);
+
+        if (userSubjects.length === 0) {
+          return;
+        }
+
+        const subjectDataPromises = await Promise.all(
+          userSubjects.map((subject) => getSubjectData(studentId, subject))
+        );
+
+        const dataMap = new Map<Subject, SubjectData>();
+        userSubjects.forEach((subject, index) => {
+          const data = subjectDataPromises[index];
+          if (data) {
+            dataMap.set(subject, data);
+          }
+        });
+
+        setSubjectsData(dataMap);
+      } catch (err: any) {
+        setError(err.message || 'Failed to reload data');
+      }
+    };
+    loadData();
   };
 
   if (loading) {
@@ -75,34 +135,75 @@ const StudentDetail: React.FC = () => {
     return <Alert severity="error">Student not found</Alert>;
   }
 
+  const currentSubject = subjects[tabValue];
+  const currentSubjectData = subjectsData.get(currentSubject) || null;
+  const currentWorksheets = worksheets.get(currentSubject) || [];
+
   return (
     <Box>
-      <Box display="flex" alignItems="center" mb={3}>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+        <Box display="flex" alignItems="center">
+          <Button
+            startIcon={<ArrowBack />}
+            onClick={() => navigate('/students')}
+            sx={{ mr: 2 }}
+          >
+            Back
+          </Button>
+          <Typography variant="h4">
+            {student.displayName || student.email}
+          </Typography>
+        </Box>
         <Button
-          startIcon={<ArrowBack />}
-          onClick={() => navigate('/students')}
-          sx={{ mr: 2 }}
+          variant="contained"
+          startIcon={<Assignment />}
+          onClick={handleAssignClick}
         >
-          Back
+          Assign Topics
         </Button>
-        <Typography variant="h4">
-          {student.displayName || student.email}
-        </Typography>
       </Box>
 
-      <SubjectBlock
-        subject="math"
-        subjectData={mathData}
-        worksheets={mathWorksheets}
-        onPractice={handlePractice}
-        isReadOnly={true}
-      />
-      <SubjectBlock
-        subject="german"
-        subjectData={germanData}
-        worksheets={germanWorksheets}
-        onPractice={handlePractice}
-        isReadOnly={true}
+      {subjects.length > 0 ? (
+        <>
+          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 3 }}>
+            {subjects.map((subject, index) => (
+              <Tab 
+                key={subject} 
+                label={subject.charAt(0).toUpperCase() + subject.slice(1)} 
+              />
+            ))}
+          </Tabs>
+
+          {currentSubject && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Assignments Component */}
+              <Assignments 
+                subject={currentSubject} 
+                subjectData={currentSubjectData} 
+                isReadOnly={false}
+                studentId={studentId}
+                onUpdate={handleAssignSave}
+              />
+
+              {/* Recent Worksheets Component */}
+              <RecentWorksheets 
+                worksheets={currentWorksheets} 
+                subjectName={currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)} 
+              />
+            </Box>
+          )}
+        </>
+      ) : (
+        <Alert severity="info">
+          No subjects assigned yet. Click "Assign Topics" to get started.
+        </Alert>
+      )}
+
+      <AssignTopicsDialog
+        open={assignDialogOpen}
+        onClose={() => setAssignDialogOpen(false)}
+        onSave={handleAssignSave}
+        studentId={studentId!}
       />
     </Box>
   );

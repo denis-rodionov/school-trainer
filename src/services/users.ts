@@ -64,3 +64,8 @@ export const updateSubjectTopicAssignments = async (
   const subjectRef = doc(db, 'users', uid, 'subjects', subject);
   await updateDoc(subjectRef, { topicAssignments });
 };
+
+export const getUserSubjects = async (uid: string): Promise<Subject[]> => {
+  const subjectsSnapshot = await getDocs(collection(db, 'users', uid, 'subjects'));
+  return subjectsSnapshot.docs.map((doc) => doc.id);
+};

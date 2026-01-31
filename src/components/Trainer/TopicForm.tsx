@@ -11,9 +11,10 @@ import {
   Select,
   MenuItem,
   Box,
+  Autocomplete,
 } from '@mui/material';
 import { Topic, Subject } from '../../types';
-import { createTopic, updateTopic } from '../../services/topics';
+import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface TopicFormProps {
@@ -25,29 +26,46 @@ interface TopicFormProps {
 
 const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) => {
   const { currentUser } = useAuth();
-  const [subject, setSubject] = useState<Subject>('math');
+  const [subject, setSubject] = useState<Subject>('');
   const [shortName, setShortName] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [defaultExerciseCount, setDefaultExerciseCount] = useState<number>(3);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
 
   useEffect(() => {
+    const loadSubjects = async () => {
+      if (open) {
+        const allTopics = await getTopics();
+        const uniqueSubjects = Array.from(new Set(allTopics.map((t) => t.subject)));
+        setAvailableSubjects(uniqueSubjects);
+      }
+    };
+    loadSubjects();
+
     if (topic) {
       setSubject(topic.subject);
       setShortName(topic.shortName);
       setTaskDescription(topic.taskDescription);
       setPrompt(topic.prompt);
+      setDefaultExerciseCount(topic.defaultExerciseCount ?? 3);
     } else {
-      setSubject('math');
+      setSubject('');
       setShortName('');
       setTaskDescription('');
       setPrompt('');
+      setDefaultExerciseCount(3);
     }
     setErrors({});
   }, [topic, open]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
+
+    if (!subject.trim()) {
+      newErrors.subject = 'Subject is required';
+    }
 
     if (!shortName.trim()) {
       newErrors.shortName = 'Short name is required';
@@ -77,6 +95,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
           shortName: shortName.trim(),
           taskDescription: taskDescription.trim(),
           prompt: prompt.trim(),
+          defaultExerciseCount,
         });
       } else {
         await createTopic({
@@ -85,6 +104,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
           taskDescription: taskDescription.trim(),
           prompt: prompt.trim(),
           createdBy: currentUser.uid,
+          defaultExerciseCount,
         });
       }
       onSave();
@@ -99,17 +119,21 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       <DialogTitle>{topic ? 'Edit Topic' : 'Create Topic'}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-          <FormControl fullWidth required>
-            <InputLabel>Subject</InputLabel>
-            <Select
-              value={subject}
-              label="Subject"
-              onChange={(e) => setSubject(e.target.value as Subject)}
-            >
-              <MenuItem value="math">Math</MenuItem>
-              <MenuItem value="german">German</MenuItem>
-            </Select>
-          </FormControl>
+          <Autocomplete
+            freeSolo
+            options={availableSubjects}
+            value={subject}
+            onInputChange={(_, newValue) => setSubject(newValue)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Subject"
+                required
+                error={!!errors.subject}
+                helperText={errors.subject}
+              />
+            )}
+          />
 
           <TextField
             label="Short Name"
@@ -144,6 +168,21 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
             rows={3}
             fullWidth
           />
+
+          <FormControl fullWidth>
+            <InputLabel>Default Exercise Count</InputLabel>
+            <Select
+              value={defaultExerciseCount}
+              label="Default Exercise Count"
+              onChange={(e) => setDefaultExerciseCount(Number(e.target.value))}
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
+                <MenuItem key={num} value={num}>
+                  {num}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
       </DialogContent>
       <DialogActions>

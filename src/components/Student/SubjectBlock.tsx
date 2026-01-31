@@ -37,9 +37,28 @@ const SubjectBlock: React.FC<SubjectBlockProps> = ({
   };
 
   return (
-    <Card sx={{ mb: 3 }}>
-      <CardContent>
-        <Typography variant="h5" gutterBottom>
+    <Card 
+      elevation={2}
+      sx={{ 
+        mb: 3,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'secondary.light',
+      }}
+    >
+      <CardContent sx={{ p: 3 }}>
+        <Typography 
+          variant="h5" 
+          gutterBottom
+          sx={{
+            color: 'secondary.main',
+            fontWeight: 600,
+            mb: 2,
+            pb: 1,
+            borderBottom: '2px solid',
+            borderColor: 'secondary.light',
+          }}
+        >
           {subjectName}
         </Typography>
 
@@ -59,15 +78,32 @@ const SubjectBlock: React.FC<SubjectBlockProps> = ({
             variant="contained"
             color="primary"
             onClick={() => onPractice(subject)}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 3,
+              mt: 2,
+              py: 1.5,
+              px: 4,
+              fontSize: '1rem',
+              fontWeight: 600,
+              borderRadius: 2,
+            }}
           >
             Practice
           </Button>
         )}
 
-        <Typography variant="h6" gutterBottom>
-          Recent Worksheets
-        </Typography>
+        <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Typography 
+            variant="h6" 
+            gutterBottom
+            sx={{
+              color: 'text.primary',
+              fontWeight: 600,
+              mb: 2,
+            }}
+          >
+            Recent Worksheets
+          </Typography>
         {worksheets.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             No completed worksheets yet
@@ -103,6 +139,7 @@ const SubjectBlock: React.FC<SubjectBlockProps> = ({
             ))}
           </List>
         )}
+        </Box>
       </CardContent>
     </Card>
   );

@@ -2,7 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'student' | 'trainer';
 
-export type Subject = 'math' | 'german';
+export type Subject = string; // Dynamic - can be any subject name
 
 export type WorksheetStatus = 'pending' | 'completed';
 
@@ -38,6 +38,7 @@ export interface Topic {
   prompt: string;
   createdAt: Timestamp;
   createdBy: string;
+  defaultExerciseCount?: number;
 }
 
 export interface Worksheet {

@@ -72,8 +72,16 @@ const TopicsScreen: React.FC = () => {
     loadTopics();
   };
 
-  const mathTopics = topics.filter((t) => t.subject === 'math');
-  const germanTopics = topics.filter((t) => t.subject === 'german');
+  // Group topics by subject dynamically
+  const topicsBySubject = topics.reduce((acc, topic) => {
+    if (!acc[topic.subject]) {
+      acc[topic.subject] = [];
+    }
+    acc[topic.subject].push(topic);
+    return acc;
+  }, {} as Record<string, Topic[]>);
+
+  const subjectNames = Object.keys(topicsBySubject).sort();
 
   if (loading) {
     return (
@@ -94,80 +102,59 @@ const TopicsScreen: React.FC = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
-        Math
-      </Typography>
-      {mathTopics.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          No math topics yet
-        </Typography>
+      {subjectNames.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 3 }}>
+          No topics yet. Create your first topic to get started.
+        </Alert>
       ) : (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          {mathTopics.map((topic) => (
-            <Grid item xs={12} sm={6} md={4} key={topic.id}>
-              <Card>
-                <CardContent>
-                  <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
-                    <Typography variant="h6">{topic.shortName}</Typography>
-                    <Chip label="Math" size="small" color="primary" />
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    {topic.taskDescription}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Prompt: {topic.prompt.substring(0, 50)}...
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <IconButton size="small" onClick={() => handleEdit(topic)}>
-                    <Edit />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => handleDelete(topic.id)} color="error">
-                    <Delete />
-                  </IconButton>
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
-
-      <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
-        German
-      </Typography>
-      {germanTopics.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          No German topics yet
-        </Typography>
-      ) : (
-        <Grid container spacing={2}>
-          {germanTopics.map((topic) => (
-            <Grid item xs={12} sm={6} md={4} key={topic.id}>
-              <Card>
-                <CardContent>
-                  <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
-                    <Typography variant="h6">{topic.shortName}</Typography>
-                    <Chip label="German" size="small" color="secondary" />
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    {topic.taskDescription}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Prompt: {topic.prompt.substring(0, 50)}...
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <IconButton size="small" onClick={() => handleEdit(topic)}>
-                    <Edit />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => handleDelete(topic.id)} color="error">
-                    <Delete />
-                  </IconButton>
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        subjectNames.map((subjectName, index) => {
+          const subjectTopics = topicsBySubject[subjectName];
+          return (
+            <Box key={subjectName}>
+              <Typography variant="h5" gutterBottom sx={{ mt: index === 0 ? 3 : 4 }}>
+                {subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
+              </Typography>
+              {subjectTopics.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  No {subjectName} topics yet
+                </Typography>
+              ) : (
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {subjectTopics.map((topic) => (
+                    <Grid item xs={12} sm={6} md={4} key={topic.id}>
+                      <Card>
+                        <CardContent>
+                          <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
+                            <Typography variant="h6">{topic.shortName}</Typography>
+                            <Chip 
+                              label={subjectName.charAt(0).toUpperCase() + subjectName.slice(1)} 
+                              size="small" 
+                              color={index % 2 === 0 ? 'primary' : 'secondary'} 
+                            />
+                          </Box>
+                          <Typography variant="body2" color="text.secondary" paragraph>
+                            {topic.taskDescription}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Prompt: {topic.prompt.substring(0, 50)}...
+                          </Typography>
+                        </CardContent>
+                        <CardActions>
+                          <IconButton size="small" onClick={() => handleEdit(topic)}>
+                            <Edit />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => handleDelete(topic.id)} color="error">
+                            <Delete />
+                          </IconButton>
+                        </CardActions>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          );
+        })
       )}
 
       <TopicForm
