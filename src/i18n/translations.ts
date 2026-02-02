@@ -53,6 +53,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'worksheet.print': 'Print',
     'worksheet.exercises': 'exercises',
     'worksheet.of': 'of',
+    'worksheet.complete': 'Complete',
+    'worksheet.completing': 'Completing',
     
     // Topics
     'topics.title': 'Topics',
@@ -228,6 +230,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'worksheet.print': 'Печать',
     'worksheet.exercises': 'упражнений',
     'worksheet.of': 'из',
+    'worksheet.complete': 'Завершить',
+    'worksheet.completing': 'Завершение',
     
     // Topics
     'topics.title': 'Темы',
@@ -403,6 +407,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'worksheet.print': 'Drucken',
     'worksheet.exercises': 'Übungen',
     'worksheet.of': 'von',
+    'worksheet.complete': 'Abschließen',
+    'worksheet.completing': 'Wird abgeschlossen',
     
     // Topics
     'topics.title': 'Themen',

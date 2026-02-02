@@ -60,10 +60,13 @@ const WorksheetScreen: React.FC = () => {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [regenerationProgress, setRegenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [shouldGoToDashboard, setShouldGoToDashboard] = useState(false);
+  const [trainerMarkedErrors, setTrainerMarkedErrors] = useState<Set<string>>(new Set()); // Track which exercises trainer marked as errors (by exercise ID)
 
   const isTrainer = userData?.role === 'trainer';
   const isCompleted = worksheet?.status === 'completed';
-  const isReadOnly = isTrainer || isCompleted;
+  const isPending = worksheet?.status === 'pending';
+  const isReviewMode = isTrainer && isPending; // Trainer reviewing a pending worksheet
+  const isReadOnly = (isTrainer && !isReviewMode) || isCompleted; // Read-only unless trainer is in review mode
 
   useEffect(() => {
     if (!worksheetId) return;
@@ -302,6 +305,109 @@ const WorksheetScreen: React.FC = () => {
     });
   };
 
+  // Handler for trainer marking an error in review mode (by exercise ID)
+  const handleMarkError = (exerciseId: string) => {
+    if (!isReviewMode) return;
+    const newErrors = new Set(trainerMarkedErrors);
+    if (newErrors.has(exerciseId)) {
+      newErrors.delete(exerciseId);
+    } else {
+      newErrors.add(exerciseId);
+    }
+    setTrainerMarkedErrors(newErrors);
+  };
+
+  // Handler for trainer completing the worksheet review
+  const handleTrainerComplete = async () => {
+    if (!worksheet || !isReviewMode || !currentUser) return;
+
+    try {
+      setSaving(true);
+
+      // Calculate total number of exercises
+      const totalExercises = exercises.length;
+
+      // Calculate score: (totalExercises - errors) / totalExercises * 100
+      const errorCount = trainerMarkedErrors.size;
+      const correctCount = totalExercises - errorCount;
+      const score = totalExercises > 0 ? (correctCount / totalExercises) * 100 : 100;
+
+      // Update exercises with attempt and userInput based on trainer's review
+      const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
+
+      exercises.forEach((exercise) => {
+        // Check if this exercise was marked as having an error
+        const hasError = trainerMarkedErrors.has(exercise.id);
+
+        // Determine attempt: 1 if no errors, 2+ if there are errors
+        const attempt = hasError ? 2 : 1;
+
+        // Build updates object
+        const updates: Partial<Exercise> = {
+          attempt,
+        };
+
+        // Only include userInput if there were errors (attempt > 1)
+        // For now, we'll leave userInput empty since trainer is reviewing a printed worksheet
+        // The student's written answers aren't captured in the system
+        // We don't set userInput here - it will be omitted from the update
+
+        exerciseUpdates.push({
+          exerciseId: exercise.id,
+          updates,
+        });
+      });
+
+      // Update exercises in database
+      const { updateExercise } = await import('../../services/worksheets');
+      for (const { exerciseId, updates } of exerciseUpdates) {
+        // Only include userInput if it's not null
+        const finalUpdates: Partial<Exercise> = { attempt: updates.attempt };
+        if (updates.userInput !== null && updates.userInput !== undefined) {
+          finalUpdates.userInput = updates.userInput;
+        }
+        await updateExercise(worksheet.id, exerciseId, finalUpdates);
+      }
+
+      // Complete worksheet with calculated score
+      await completeWorksheet(worksheet.id, score);
+
+      // Update statistics for the student
+      if (exercises.length > 0) {
+        const firstExercise = exercises[0];
+        const topic = await getTopic(firstExercise.topicId);
+        if (topic) {
+          const subject = topic.subject;
+          const studentId = worksheet.studentId;
+          const subjectData = await getSubjectData(studentId, subject);
+          if (subjectData) {
+            // Get all completed worksheets in last 7 days
+            const { getCompletedWorksheets } = await import('../../services/worksheets');
+            const allCompleted = await getCompletedWorksheets(studentId, 100);
+            const last7Days = allCompleted.filter((w) =>
+              w.completedAt ? isWithinLastDays(w.completedAt, 7) : false
+            );
+
+            const newStatistics = {
+              worksheetsLast7Days: last7Days.length,
+              lastWorksheetDate: Timestamp.now(),
+            };
+
+            await updateSubjectStatistics(studentId, subject, newStatistics);
+          }
+        }
+      }
+
+      // Reload worksheet to show completed state
+      const updatedWorksheet = await getWorksheet(worksheet.id);
+      setWorksheet(updatedWorksheet);
+    } catch (err: any) {
+      alert(err.message || t('error.failedToSubmitWorksheet'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleRegenerate = async () => {
     if (!worksheet || !worksheetId || worksheet.status !== 'pending' || !currentUser) return;
     
@@ -538,6 +644,9 @@ const WorksheetScreen: React.FC = () => {
               // Update globalAnswerIndex for next exercise
               globalAnswerIndex += exerciseCorrectAnswers.length;
 
+              // Check if this exercise is marked as having an error
+              const isExerciseMarkedAsError = trainerMarkedErrors.has(exercise.id);
+
               return (
                 <ExerciseBlock
                   key={exercise.id}
@@ -549,6 +658,9 @@ const WorksheetScreen: React.FC = () => {
                   errors={exerciseErrors}
                   isReadOnly={isReadOnly}
                   showCorrectAnswers={isTrainer}
+                  isReviewMode={isReviewMode}
+                  isExerciseMarkedAsError={isExerciseMarkedAsError}
+                  onMarkError={() => handleMarkError(exercise.id)}
                 />
               );
             })}
@@ -556,7 +668,21 @@ const WorksheetScreen: React.FC = () => {
         );
       })}
 
-      {!isReadOnly && (
+      {isReviewMode && (
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleTrainerComplete}
+            disabled={saving}
+            size="large"
+          >
+            {saving ? t('worksheet.completing') + '...' : t('worksheet.complete')}
+          </Button>
+        </Box>
+      )}
+
+      {!isReadOnly && !isReviewMode && (
         <Box sx={{ mt: 3 }}>
           <Button
             variant="contained"

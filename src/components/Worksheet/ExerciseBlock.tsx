@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Typography, TextField, Paper } from '@mui/material';
+import { Box, Typography, TextField, Paper, IconButton } from '@mui/material';
+import { Close } from '@mui/icons-material';
 import { Exercise } from '../../types';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -11,6 +12,9 @@ interface ExerciseBlockProps {
   errors?: boolean[];
   isReadOnly?: boolean;
   showCorrectAnswers?: boolean;
+  isReviewMode?: boolean;
+  isExerciseMarkedAsError?: boolean;
+  onMarkError?: () => void;
 }
 
 const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
@@ -20,6 +24,9 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   errors = [],
   isReadOnly = false,
   showCorrectAnswers = false,
+  isReviewMode = false,
+  isExerciseMarkedAsError = false,
+  onMarkError,
 }) => {
   const { t } = useLanguage();
   // Extract correct answers from markdown
@@ -28,7 +35,7 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   let answerIndex = 0;
 
   return (
-    <Paper sx={{ p: 2, mb: 2, backgroundColor: errors.some((e) => e) ? '#ffebee' : 'transparent' }}>
+    <Paper sx={{ p: 2, mb: 2, backgroundColor: errors.some((e) => e) || isExerciseMarkedAsError ? '#ffebee' : 'transparent' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
         {parsed.parts.map((part, partIndex) => {
           if (part.isGap) {
@@ -42,14 +49,14 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 value={answers[currentAnswerIndex] || ''}
                 onChange={(e) => onAnswerChange(currentAnswerIndex, e.target.value)}
                 disabled={isReadOnly}
-                error={hasError}
+                error={hasError || isExerciseMarkedAsError}
                 size="small"
                 sx={{
                   width: '120px',
                   '& .MuiInputBase-input': {
                     backgroundColor: isReadOnly
                       ? '#f5f5f5'
-                      : hasError
+                      : hasError || isExerciseMarkedAsError
                       ? '#ffebee'
                       : 'white',
                     fontSize: '16px', // Match text font size
@@ -61,7 +68,7 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 helperText={
                   showCorrectAnswers && correctAnswer
                     ? `${t('exercise.correct')} ${correctAnswer}`
-                    : hasError
+                    : hasError || isExerciseMarkedAsError
                     ? t('exercise.incorrect')
                     : ''
                 }
@@ -83,6 +90,26 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
             );
           }
         })}
+        {isReviewMode && !isExerciseMarkedAsError && (
+          <IconButton
+            size="small"
+            onClick={() => onMarkError?.()}
+            sx={{
+              padding: '4px',
+              minWidth: '24px',
+              width: '24px',
+              height: '24px',
+              backgroundColor: 'error.main',
+              color: 'white',
+              marginLeft: '8px',
+              '&:hover': {
+                backgroundColor: 'error.dark',
+              },
+            }}
+          >
+            <Close fontSize="small" />
+          </IconButton>
+        )}
       </Box>
       {exercise.userInput && (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
