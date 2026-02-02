@@ -55,8 +55,8 @@ export interface Exercise {
   id: string;
   topicId: string;
   topicShortName: string;
-  markdown: string;
-  correctAnswers: string[];
-  userInput?: string;
+  markdown: string; // Contains <input> tags with data-answer attributes for correct answers
+  userInput?: string; // Last incorrect attempt (null if attempt === 1, i.e., got it right on first try)
+  attempt?: number; // Number of attempts before getting it right (1 = first try correct, >1 = multiple attempts)
   order: number;
 }

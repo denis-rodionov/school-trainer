@@ -176,10 +176,36 @@ export const updateWorksheet = async (
   await updateDoc(worksheetRef, updates);
 };
 
+export const updateExercise = async (
+  worksheetId: string,
+  exerciseId: string,
+  updates: Partial<Exercise>
+): Promise<void> => {
+  const exerciseRef = doc(db, 'worksheets', worksheetId, 'exercises', exerciseId);
+  await updateDoc(exerciseRef, updates);
+};
+
+export const deleteWorksheet = async (worksheetId: string): Promise<void> => {
+  // Delete all exercises first
+  const exercises = await getExercises(worksheetId);
+  const batch = writeBatch(db);
+  
+  exercises.forEach((exercise) => {
+    const exerciseRef = doc(db, 'worksheets', worksheetId, 'exercises', exercise.id);
+    batch.delete(exerciseRef);
+  });
+  
+  // Delete the worksheet
+  const worksheetRef = doc(db, 'worksheets', worksheetId);
+  batch.delete(worksheetRef);
+  
+  await batch.commit();
+};
+
 export const completeWorksheet = async (
   worksheetId: string,
   score: number,
-  userInputs: string[]
+  userInputs?: string[] // Optional for backward compatibility
 ): Promise<void> => {
   const batch = writeBatch(db);
   
@@ -191,16 +217,18 @@ export const completeWorksheet = async (
     completedAt: Timestamp.now(),
   });
   
-  // Update exercises with user inputs
-  const exercises = await getExercises(worksheetId);
-  exercises.forEach((exercise, index) => {
-    if (userInputs[index]) {
-      const exerciseRef = doc(db, 'worksheets', worksheetId, 'exercises', exercise.id);
-      batch.update(exerciseRef, {
-        userInput: userInputs[index],
-      });
-    }
-  });
+  // Update exercises with user inputs (if provided, for backward compatibility)
+  if (userInputs && userInputs.length > 0) {
+    const exercises = await getExercises(worksheetId);
+    exercises.forEach((exercise, index) => {
+      if (userInputs[index]) {
+        const exerciseRef = doc(db, 'worksheets', worksheetId, 'exercises', exercise.id);
+        batch.update(exerciseRef, {
+          userInput: userInputs[index],
+        });
+      }
+    });
+  }
   
   await batch.commit();
 };

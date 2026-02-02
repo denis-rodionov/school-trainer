@@ -26,6 +26,7 @@ import { createWorksheet, getPendingWorksheetBySubject } from '../../services/wo
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { extractGaps } from '../../utils/markdownParser';
+import { generateExercises } from '../../services/ai';
 
 interface AssignmentsProps {
   subject: Subject;
@@ -51,6 +52,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const subjectName = subject.charAt(0).toUpperCase() + subject.slice(1);
 
   useEffect(() => {
@@ -100,36 +102,46 @@ const Assignments: React.FC<AssignmentsProps> = ({
         return;
       }
 
-      // Create exercises from topic assignments
+      // Create exercises from topic assignments using AI generation
       const exercises: Omit<Exercise, 'id'>[] = [];
       let exerciseOrder = 0;
 
       for (const assignment of subjectData.topicAssignments) {
         const topic = topics.get(assignment.topicId);
-        if (!topic) continue;
+        if (!topic || !topic.prompt) continue;
 
-        // For each assignment, create the specified number of exercises
-        // Since exercises need to be created manually, we'll create placeholder exercises
-        // The trainer will need to manually create exercises with proper markdown and gaps
-        for (let i = 0; i < assignment.count; i++) {
-          // Create a simple placeholder exercise
-          // In a real implementation, this would use AI to generate from the topic's prompt
-          // For now, create a basic template that trainers can edit
-          const placeholderMarkdown = `${topic.taskDescription}\n\nExercise ${i + 1}: Please fill in the blank: ___`;
-          const gaps = extractGaps(placeholderMarkdown);
-          
-          exercises.push({
-            topicId: topic.id,
-            topicShortName: topic.shortName,
-            markdown: placeholderMarkdown,
-            correctAnswers: gaps.length > 0 ? gaps : ['answer'],
-            order: exerciseOrder++,
+        try {
+          // Generate exercises using AI
+          const generatedExercises = await generateExercises(
+            topic.prompt,
+            topic.shortName,
+            assignment.count
+          );
+
+          // Convert generated exercises to our format
+          generatedExercises.forEach((generated, index) => {
+            exercises.push({
+              topicId: topic.id,
+              topicShortName: topic.shortName,
+              markdown: generated.markdown, // Markdown contains <input> tags with data-answer attributes
+              order: exerciseOrder++,
+            });
           });
+        } catch (error: any) {
+          console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
+          
+          // Show detailed error message to user
+          const errorMessage = error.message || 'Unknown error occurred';
+          setAiError(`Failed to generate exercises for topic "${topic.shortName}": ${errorMessage}`);
+          
+          // Don't create placeholder exercises - let user know there's an issue
+          // They can try again or contact their trainer
+          throw error; // Re-throw to stop worksheet creation
         }
       }
 
       if (exercises.length === 0) {
-        alert('No exercises could be generated. Please contact your trainer.');
+        setAiError('No exercises could be generated. Please contact your trainer.');
         return;
       }
 
@@ -140,7 +152,10 @@ const Assignments: React.FC<AssignmentsProps> = ({
       navigate(`/worksheet/${worksheetId}`);
     } catch (err: any) {
       console.error('Failed to create worksheet:', err);
-      alert(err.message || 'Failed to create worksheet');
+      // Error message already set in catch block above, or set it here if it's a different error
+      if (!aiError) {
+        setAiError(err.message || 'Failed to create worksheet. Please try again or contact your trainer.');
+      }
     } finally {
       setGeneratingWorksheet(false);
     }
@@ -389,6 +404,26 @@ const Assignments: React.FC<AssignmentsProps> = ({
       >
         <Alert onClose={() => setSaveSuccess(false)} severity="success" sx={{ width: '100%' }}>
           Assignment updated successfully!
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!aiError}
+        autoHideDuration={10000}
+        onClose={() => setAiError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setAiError(null)} 
+          severity="error" 
+          sx={{ width: '100%', maxWidth: '600px' }}
+        >
+          <Typography variant="body2" fontWeight="bold" gutterBottom>
+            AI Exercise Generation Error
+          </Typography>
+          <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-wrap' }}>
+            {aiError}
+          </Typography>
         </Alert>
       </Snackbar>
     </Card>

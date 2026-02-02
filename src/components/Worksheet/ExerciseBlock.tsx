@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, TextField, Paper } from '@mui/material';
 import { Exercise } from '../../types';
-import { parseMarkdown } from '../../utils/markdownParser';
+import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 
 interface ExerciseBlockProps {
   exercise: Exercise;
@@ -20,17 +20,19 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   isReadOnly = false,
   showCorrectAnswers = false,
 }) => {
-  const parsed = parseMarkdown(exercise.markdown, exercise.correctAnswers);
+  // Extract correct answers from markdown
+  const correctAnswers = extractCorrectAnswers(exercise.markdown);
+  const parsed = parseMarkdown(exercise.markdown);
   let answerIndex = 0;
 
   return (
     <Paper sx={{ p: 2, mb: 2, backgroundColor: errors.some((e) => e) ? '#ffebee' : 'transparent' }}>
-      <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
         {parsed.parts.map((part, partIndex) => {
           if (part.isGap) {
             const currentAnswerIndex = answerIndex++;
             const hasError = errors[currentAnswerIndex];
-            const correctAnswer = exercise.correctAnswers[currentAnswerIndex];
+            const correctAnswer = correctAnswers[currentAnswerIndex] || part.correctAnswer || '';
 
             return (
               <TextField
@@ -42,13 +44,13 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 size="small"
                 sx={{
                   width: '120px',
-                  mx: 0.5,
                   '& .MuiInputBase-input': {
                     backgroundColor: isReadOnly
                       ? '#f5f5f5'
                       : hasError
                       ? '#ffebee'
                       : 'white',
+                    fontSize: '16px', // Match text font size
                   },
                 }}
                 inputProps={{
@@ -64,7 +66,19 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
               />
             );
           } else {
-            return <span key={`text-${partIndex}`}>{part.text}</span>;
+            return (
+              <Typography
+                key={`text-${partIndex}`}
+                component="span"
+                sx={{
+                  fontSize: '16px', // Match input font size
+                  lineHeight: '40px', // Match input height for vertical alignment
+                  display: 'inline-block',
+                }}
+              >
+                {part.text}
+              </Typography>
+            );
           }
         })}
       </Box>

@@ -8,23 +8,31 @@ import {
   Alert,
   Paper,
   Chip,
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import { ArrowBack } from '@mui/icons-material';
+import { ArrowBack, Refresh, Warning } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getWorksheet,
   getExercises,
   completeWorksheet,
   updateWorksheet,
+  deleteWorksheet,
+  createWorksheet,
 } from '../../services/worksheets';
 import { getTopic } from '../../services/topics';
 import { Worksheet, Exercise } from '../../types';
 import ExerciseBlock from './ExerciseBlock';
-import { transformMarkdownWithAnswers } from '../../utils/markdownParser';
+import { transformMarkdownWithAnswers, extractCorrectAnswers } from '../../utils/markdownParser';
 import {
   updateSubjectStatistics,
   getSubjectData,
 } from '../../services/users';
+import { generateExercises } from '../../services/ai';
 import { isWithinLastDays } from '../../utils/dateUtils';
 import { Timestamp } from 'firebase/firestore';
 
@@ -38,9 +46,14 @@ const WorksheetScreen: React.FC = () => {
   const [answers, setAnswers] = useState<string[]>([]);
   const [errors, setErrors] = useState<boolean[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [attempts, setAttempts] = useState<number[]>([]); // Track attempts per exercise
+  const [previousAnswers, setPreviousAnswers] = useState<string[][]>([]); // Track previous incorrect attempts per exercise
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const isTrainer = userData?.role === 'trainer';
   const isCompleted = worksheet?.status === 'completed';
@@ -58,7 +71,9 @@ const WorksheetScreen: React.FC = () => {
         ]);
 
         if (!worksheetData) {
-          setError('Worksheet not found');
+          // Worksheet not found (might have been deleted/regenerated)
+          // Redirect to dashboard instead of showing error
+          navigate('/dashboard');
           return;
         }
 
@@ -86,8 +101,17 @@ const WorksheetScreen: React.FC = () => {
         }
         setTopicsMap(topics);
 
-        // Initialize answers - calculate total number of gaps
-        const totalGaps = sortedExercises.reduce((sum, ex) => sum + ex.correctAnswers.length, 0);
+        // Initialize answers - calculate total number of gaps from markdown
+        const totalGaps = sortedExercises.reduce((sum, ex) => {
+          const correctAnswers = extractCorrectAnswers(ex.markdown);
+          return sum + correctAnswers.length;
+        }, 0);
+        
+        // Initialize attempts (1 for each exercise, will be incremented on wrong answers)
+        setAttempts(new Array(sortedExercises.length).fill(1));
+        // Initialize previous answers (empty arrays for each exercise)
+        setPreviousAnswers(new Array(sortedExercises.length).fill([]).map(() => []));
+        
         if (isCompleted) {
           // For completed worksheets, we'll show userInput text
           setAnswers(new Array(totalGaps).fill(''));
@@ -117,31 +141,55 @@ const WorksheetScreen: React.FC = () => {
     }
   };
 
-  const evaluateAnswers = (): boolean[] => {
+  const evaluateAnswers = (): { errors: boolean[]; allCorrect: boolean } => {
     const newErrors: boolean[] = [];
+    let globalIndex = 0;
+    let allCorrect = true;
+
     exercises.forEach((exercise, exerciseIndex) => {
-      // For each exercise, check all gaps
-      exercise.correctAnswers.forEach((correctAnswer, answerIndex) => {
-        const globalIndex = exercises
-          .slice(0, exerciseIndex)
-          .reduce((sum, ex) => sum + ex.correctAnswers.length, 0) + answerIndex;
+      // Extract correct answers from markdown
+      const correctAnswers = extractCorrectAnswers(exercise.markdown);
+      let exerciseHasError = false;
+      const exerciseAnswers: string[] = [];
+
+      correctAnswers.forEach((correctAnswer, answerIndex) => {
         const userAnswer = answers[globalIndex]?.trim().toLowerCase();
         const correct = correctAnswer.trim().toLowerCase();
-        newErrors[globalIndex] = userAnswer !== correct;
+        const isError = userAnswer !== correct;
+        newErrors[globalIndex] = isError;
+        exerciseAnswers.push(answers[globalIndex] || ''); // Store original (not lowercased)
+        
+        if (isError) {
+          exerciseHasError = true;
+          allCorrect = false;
+        }
+        globalIndex++;
       });
+
+      // If exercise has errors, save current answers as previous attempt and increment attempt
+      if (exerciseHasError) {
+        const newPreviousAnswers = [...previousAnswers];
+        newPreviousAnswers[exerciseIndex] = [...exerciseAnswers]; // Save current incorrect attempt
+        setPreviousAnswers(newPreviousAnswers);
+        
+        const newAttempts = [...attempts];
+        newAttempts[exerciseIndex] = (newAttempts[exerciseIndex] || 1) + 1;
+        setAttempts(newAttempts);
+      }
     });
-    return newErrors;
+
+    return { errors: newErrors, allCorrect };
   };
 
   const handleSubmit = async () => {
     if (isReadOnly) return;
 
-    const newErrors = evaluateAnswers();
+    const { errors: newErrors, allCorrect } = evaluateAnswers();
     setErrors(newErrors);
     setSubmitted(true);
 
-    if (newErrors.some((e) => e)) {
-      return; // Don't submit if there are errors
+    if (!allCorrect) {
+      return; // Don't submit if there are errors - user can correct and resubmit
     }
 
     if (!worksheet || !currentUser) return;
@@ -154,22 +202,36 @@ const WorksheetScreen: React.FC = () => {
       const correctAnswers = totalAnswers - newErrors.filter((e) => e).length;
       const score = (correctAnswers / totalAnswers) * 100;
 
-      // Transform markdown with answers for storage
-      const userInputs: string[] = [];
+      // Update exercises with attempt and userInput
       let globalAnswerIndex = 0;
+      const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
 
-      exercises.forEach((exercise) => {
-        const exerciseAnswers: string[] = [];
-        exercise.correctAnswers.forEach(() => {
-          exerciseAnswers.push(answers[globalAnswerIndex] || '');
-          globalAnswerIndex++;
+      exercises.forEach((exercise, exerciseIndex) => {
+        const attempt = attempts[exerciseIndex] || 1;
+        // userInput: null if attempt === 1 (got it right first try)
+        // userInput: last incorrect attempt if attempt > 1 (stored in previousAnswers)
+        const lastIncorrectAttempt = previousAnswers[exerciseIndex] || [];
+        const userInput = attempt === 1 
+          ? null 
+          : transformMarkdownWithAnswers(exercise.markdown, lastIncorrectAttempt);
+
+        exerciseUpdates.push({
+          exerciseId: exercise.id,
+          updates: {
+            attempt,
+            userInput: userInput || undefined,
+          },
         });
-        const userInput = transformMarkdownWithAnswers(exercise.markdown, exerciseAnswers);
-        userInputs.push(userInput);
       });
 
-      // Complete worksheet
-      await completeWorksheet(worksheet.id, score, userInputs);
+      // Update exercises in database
+      const { updateExercise } = await import('../../services/worksheets');
+      for (const { exerciseId, updates } of exerciseUpdates) {
+        await updateExercise(worksheet.id, exerciseId, updates);
+      }
+
+      // Complete worksheet (userInputs no longer needed, exercises already updated)
+      await completeWorksheet(worksheet.id, score);
 
       // Update statistics - recalculate worksheets in last 7 days
       if (exercises.length > 0) {
@@ -207,6 +269,94 @@ const WorksheetScreen: React.FC = () => {
     }
   };
 
+  const handleRegenerateClick = () => {
+    setConfirmDialogOpen(true);
+  };
+
+  const handleRegenerate = async () => {
+    if (!worksheet || !worksheetId || worksheet.status !== 'pending' || !currentUser) return;
+    
+    setConfirmDialogOpen(false);
+
+    try {
+      setRegenerating(true);
+      setRegenerateError(null);
+      
+      // Store subject before deletion
+      const subject = worksheet.subject;
+      
+      // Delete the current worksheet
+      await deleteWorksheet(worksheetId);
+      
+      // Get topic assignments for this subject
+      const subjectData = await getSubjectData(currentUser.uid, subject);
+      if (!subjectData || !subjectData.topicAssignments.length) {
+        throw new Error('No topic assignments found for this subject. Please contact your trainer.');
+      }
+
+      // Load topics
+      const topicsMap = new Map<string, any>();
+      for (const assignment of subjectData.topicAssignments) {
+        const topic = await getTopic(assignment.topicId);
+        if (topic) {
+          topicsMap.set(assignment.topicId, topic);
+        }
+      }
+
+      // Generate new exercises from topic assignments using AI
+      const exercises: Omit<Exercise, 'id'>[] = [];
+      let exerciseOrder = 0;
+
+      for (const assignment of subjectData.topicAssignments) {
+        const topic = topicsMap.get(assignment.topicId);
+        if (!topic || !topic.prompt) continue;
+
+        try {
+          // Generate exercises using AI
+          const generatedExercises = await generateExercises(
+            topic.prompt,
+            topic.shortName,
+            assignment.count
+          );
+
+          // Convert generated exercises to our format
+          generatedExercises.forEach((generated) => {
+            exercises.push({
+              topicId: topic.id,
+              topicShortName: topic.shortName,
+              markdown: generated.markdown,
+              order: exerciseOrder++,
+            });
+          });
+        } catch (error: any) {
+          console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
+          const errorMessage = error.message || 'Unknown error occurred';
+          setRegenerateError(`Failed to generate exercises for topic "${topic.shortName}": ${errorMessage}`);
+          throw error; // Stop worksheet creation
+        }
+      }
+
+      if (exercises.length === 0) {
+        setRegenerateError('No exercises could be generated. Please contact your trainer.');
+        return;
+      }
+
+      // Create new worksheet
+      const newWorksheetId = await createWorksheet(currentUser.uid, subject, exercises);
+      
+      // Navigate to the new worksheet
+      navigate(`/worksheet/${newWorksheetId}`);
+    } catch (err: any) {
+      console.error('Failed to regenerate worksheet:', err);
+      // Show error but stay on the page
+      if (!regenerateError) {
+        setRegenerateError(err.message || 'Failed to regenerate worksheet. Please try again or contact your trainer.');
+      }
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   // Group exercises by topic
   const exercisesByTopic = exercises.reduce((acc, exercise) => {
     if (!acc[exercise.topicId]) {
@@ -237,7 +387,7 @@ const WorksheetScreen: React.FC = () => {
       <Box display="flex" alignItems="center" mb={3}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/dashboard')}
           sx={{ mr: 2 }}
         >
           Back
@@ -249,6 +399,18 @@ const WorksheetScreen: React.FC = () => {
             color={worksheet.score >= 80 ? 'success' : worksheet.score >= 60 ? 'warning' : 'error'}
             sx={{ ml: 2 }}
           />
+        )}
+        {worksheet.status === 'pending' && !isTrainer && (
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={regenerating ? <CircularProgress size={16} /> : <Refresh />}
+            onClick={handleRegenerateClick}
+            disabled={regenerating}
+            sx={{ ml: 'auto' }}
+          >
+            {regenerating ? 'Regenerating...' : 'Re-generate'}
+          </Button>
         )}
       </Box>
 
@@ -262,7 +424,8 @@ const WorksheetScreen: React.FC = () => {
           if (ex.topicId === topicId) {
             break;
           }
-          globalAnswerIndex += ex.correctAnswers.length;
+          const exCorrectAnswers = extractCorrectAnswers(ex.markdown);
+          globalAnswerIndex += exCorrectAnswers.length;
         }
 
         return (
@@ -274,18 +437,19 @@ const WorksheetScreen: React.FC = () => {
               {topic.taskDescription}
             </Typography>
             {topicExercises.map((exercise) => {
+              const exerciseCorrectAnswers = extractCorrectAnswers(exercise.markdown);
               const exerciseAnswerStart = globalAnswerIndex;
               const exerciseAnswers = answers.slice(
                 exerciseAnswerStart,
-                exerciseAnswerStart + exercise.correctAnswers.length
+                exerciseAnswerStart + exerciseCorrectAnswers.length
               );
               const exerciseErrors = errors.slice(
                 exerciseAnswerStart,
-                exerciseAnswerStart + exercise.correctAnswers.length
+                exerciseAnswerStart + exerciseCorrectAnswers.length
               );
 
               // Update globalAnswerIndex for next exercise
-              globalAnswerIndex += exercise.correctAnswers.length;
+              globalAnswerIndex += exerciseCorrectAnswers.length;
 
               return (
                 <ExerciseBlock
@@ -318,6 +482,56 @@ const WorksheetScreen: React.FC = () => {
           </Button>
         </Box>
       )}
+
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Warning color="warning" />
+          Regenerate Worksheet
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Delete this worksheet and create a new one?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRegenerate}
+            variant="contained"
+            color="primary"
+            disabled={regenerating}
+          >
+            Regenerate
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!regenerateError}
+        autoHideDuration={10000}
+        onClose={() => setRegenerateError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setRegenerateError(null)} 
+          severity="error" 
+          sx={{ width: '100%', maxWidth: '600px' }}
+        >
+          <Typography variant="body2" fontWeight="bold" gutterBottom>
+            Failed to Regenerate Worksheet
+          </Typography>
+          <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-wrap' }}>
+            {regenerateError}
+          </Typography>
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
