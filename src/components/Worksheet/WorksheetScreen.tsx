@@ -56,6 +56,7 @@ const WorksheetScreen: React.FC = () => {
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [regenerationProgress, setRegenerationProgress] = useState<{ current: number; total: number } | null>(null);
+  const [shouldGoToDashboard, setShouldGoToDashboard] = useState(false);
 
   const isTrainer = userData?.role === 'trainer';
   const isCompleted = worksheet?.status === 'completed';
@@ -75,6 +76,7 @@ const WorksheetScreen: React.FC = () => {
         if (!worksheetData) {
           // Worksheet not found (might have been deleted/regenerated)
           // Redirect to dashboard instead of showing error
+          setShouldGoToDashboard(true);
           navigate('/dashboard');
           return;
         }
@@ -366,6 +368,9 @@ const WorksheetScreen: React.FC = () => {
       // Reset progress
       setRegenerationProgress(null);
       
+      // Mark that we should go to dashboard on back (since old worksheet was deleted)
+      setShouldGoToDashboard(true);
+      
       // Navigate to the new worksheet
       navigate(`/worksheet/${newWorksheetId}`);
     } catch (err: any) {
@@ -412,7 +417,18 @@ const WorksheetScreen: React.FC = () => {
       <Box display="flex" alignItems="center" mb={3}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => navigate('/dashboard')}
+          onClick={() => {
+            if (shouldGoToDashboard) {
+              navigate('/dashboard');
+            } else {
+              // Try to go back, fallback to dashboard if no history
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/dashboard');
+              }
+            }
+          }}
           sx={{ mr: 2 }}
         >
           Back
@@ -469,9 +485,6 @@ const WorksheetScreen: React.FC = () => {
         return (
           <Paper key={topicId} sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>
-              {topic.shortName}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
               {topic.taskDescription}
             </Typography>
             {topicExercises.map((exercise) => {
