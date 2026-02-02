@@ -17,13 +17,15 @@ import {
   Paper,
   Typography,
   Divider,
+  Grid,
 } from '@mui/material';
-import { Science, Refresh } from '@mui/icons-material';
+import { Science, Refresh, Translate } from '@mui/icons-material';
 import { Topic, Subject } from '../../types';
 import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateExercise } from '../../services/ai';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
+import { translateToGerman } from '../../services/translation';
 
 interface TopicFormProps {
   open: boolean;
@@ -45,6 +47,19 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
   const [testExerciseMarkdown, setTestExerciseMarkdown] = useState<string | null>(null);
   const [testingExercise, setTestingExercise] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
+  
+  // Translation state
+  const [originalValues, setOriginalValues] = useState<{
+    shortName: string;
+    taskDescription: string;
+    prompt: string;
+  }>({ shortName: '', taskDescription: '', prompt: '' });
+  const [translating, setTranslating] = useState<{
+    shortName: boolean;
+    taskDescription: boolean;
+    prompt: boolean;
+  }>({ shortName: false, taskDescription: false, prompt: false });
+  const [translatedField, setTranslatedField] = useState<'shortName' | 'taskDescription' | 'prompt' | null>(null);
 
   useEffect(() => {
     const loadSubjects = async () => {
@@ -73,6 +88,8 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     setTestExercise(null);
     setTestExerciseMarkdown(null);
     setTestError(null);
+    setTranslatedField(null);
+    setOriginalValues({ shortName: '', taskDescription: '', prompt: '' });
   }, [topic, open]);
 
   const validate = (): boolean => {
@@ -96,6 +113,51 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleTranslate = async (field: 'shortName' | 'taskDescription' | 'prompt') => {
+    const currentValue = field === 'shortName' ? shortName : field === 'taskDescription' ? taskDescription : prompt;
+    
+    if (!currentValue.trim()) {
+      return;
+    }
+
+    try {
+      // Store original value if not already stored
+      if (!translatedField) {
+        setOriginalValues({
+          shortName,
+          taskDescription,
+          prompt,
+        });
+      }
+
+      setTranslating(prev => ({ ...prev, [field]: true }));
+      
+      const translated = await translateToGerman(currentValue);
+      
+      if (field === 'shortName') {
+        setShortName(translated);
+      } else if (field === 'taskDescription') {
+        setTaskDescription(translated);
+      } else {
+        setPrompt(translated);
+      }
+      
+      setTranslatedField(field);
+    } catch (err: any) {
+      alert(err.message || 'Failed to translate');
+    } finally {
+      setTranslating(prev => ({ ...prev, [field]: false }));
+    }
+  };
+
+  const handleRevert = () => {
+    setShortName(originalValues.shortName);
+    setTaskDescription(originalValues.taskDescription);
+    setPrompt(originalValues.prompt);
+    setTranslatedField(null);
+    setOriginalValues({ shortName: '', taskDescription: '', prompt: '' });
   };
 
   const handleTest = async () => {
@@ -172,75 +234,128 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       <DialogTitle>{topic ? 'Edit Topic' : 'Create Topic'}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-          <Autocomplete
-            freeSolo
-            options={availableSubjects}
-            value={subject}
-            onInputChange={(_, newValue) => setSubject(newValue)}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Subject"
-                required
-                error={!!errors.subject}
-                helperText={errors.subject}
+          <Grid container spacing={2} alignItems="flex-start">
+            <Grid item xs={12} sm={10}>
+              <Autocomplete
+                freeSolo
+                options={availableSubjects}
+                value={subject}
+                onInputChange={(_, newValue) => setSubject(newValue)}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Subject"
+                    required
+                    error={!!errors.subject}
+                    helperText={errors.subject}
+                    fullWidth
+                  />
+                )}
               />
-            )}
-          />
+            </Grid>
+            <Grid item xs={12} sm={2}></Grid>
 
-          <TextField
-            label="Short Name"
-            value={shortName}
-            onChange={(e) => setShortName(e.target.value)}
-            required
-            error={!!errors.shortName}
-            helperText={errors.shortName}
-            fullWidth
-          />
+            <Grid item xs={12} sm={10}>
+              <TextField
+                label="Short Name"
+                value={shortName}
+                onChange={(e) => setShortName(e.target.value)}
+                required
+                error={!!errors.shortName}
+                helperText={errors.shortName}
+                fullWidth
+              />
+            </Grid>
+            <Grid item xs={12} sm={2}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={translating.shortName ? <CircularProgress size={16} /> : translatedField === 'shortName' ? <Refresh /> : <Translate />}
+                onClick={translatedField === 'shortName' ? handleRevert : () => handleTranslate('shortName')}
+                disabled={translating.shortName || (!shortName.trim() && translatedField !== 'shortName')}
+                fullWidth
+              >
+                {translatedField === 'shortName' ? 'Revert' : 'DE'}
+              </Button>
+            </Grid>
 
-          <TextField
-            label="Task Description"
-            value={taskDescription}
-            onChange={(e) => setTaskDescription(e.target.value)}
-            required
-            error={!!errors.taskDescription}
-            helperText={errors.taskDescription}
-            multiline
-            rows={3}
-            fullWidth
-          />
+            <Grid item xs={12} sm={10}>
+              <TextField
+                label="Task Description"
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                required
+                error={!!errors.taskDescription}
+                helperText={errors.taskDescription}
+                multiline
+                rows={3}
+                fullWidth
+              />
+            </Grid>
+            <Grid item xs={12} sm={2}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={translating.taskDescription ? <CircularProgress size={16} /> : translatedField === 'taskDescription' ? <Refresh /> : <Translate />}
+                onClick={translatedField === 'taskDescription' ? handleRevert : () => handleTranslate('taskDescription')}
+                disabled={translating.taskDescription || (!taskDescription.trim() && translatedField !== 'taskDescription')}
+                fullWidth
+              >
+                {translatedField === 'taskDescription' ? 'Revert' : 'DE'}
+              </Button>
+            </Grid>
 
-          <TextField
-            label="Prompt (for AI generation)"
-            value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              setTestExercise(null);
-              setTestExerciseMarkdown(null);
-              setTestError(null);
-            }}
-            required
-            error={!!errors.prompt}
-            helperText={errors.prompt}
-            multiline
-            rows={3}
-            fullWidth
-          />
+            <Grid item xs={12} sm={10}>
+              <TextField
+                label="Prompt (for AI generation)"
+                value={prompt}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  setTestExercise(null);
+                  setTestExerciseMarkdown(null);
+                  setTestError(null);
+                }}
+                required
+                error={!!errors.prompt}
+                helperText={errors.prompt}
+                multiline
+                rows={3}
+                fullWidth
+              />
+            </Grid>
+            <Grid item xs={12} sm={2}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={translating.prompt ? <CircularProgress size={16} /> : translatedField === 'prompt' ? <Refresh /> : <Translate />}
+                onClick={translatedField === 'prompt' ? handleRevert : () => handleTranslate('prompt')}
+                disabled={translating.prompt || (!prompt.trim() && translatedField !== 'prompt')}
+                fullWidth
+              >
+                {translatedField === 'prompt' ? 'Revert' : 'DE'}
+              </Button>
+            </Grid>
+          </Grid>
 
-          <FormControl fullWidth>
-            <InputLabel>Default Exercise Count</InputLabel>
-            <Select
-              value={defaultExerciseCount}
-              label="Default Exercise Count"
-              onChange={(e) => setDefaultExerciseCount(Number(e.target.value))}
-            >
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
-                <MenuItem key={num} value={num}>
-                  {num}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={10}>
+              <FormControl fullWidth>
+                <InputLabel>Default Exercise Count</InputLabel>
+                <Select
+                  value={defaultExerciseCount}
+                  label="Default Exercise Count"
+                  onChange={(e) => setDefaultExerciseCount(Number(e.target.value))}
+                >
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
+                    <MenuItem key={num} value={num}>
+                      {num}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={2}></Grid>
+          </Grid>
 
           <Box sx={{ mt: 2 }}>
             <Divider sx={{ mb: 2 }} />
