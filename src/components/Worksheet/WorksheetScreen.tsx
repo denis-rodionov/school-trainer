@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  LinearProgress,
 } from '@mui/material';
 import { ArrowBack, Refresh, Warning } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
@@ -54,6 +55,7 @@ const WorksheetScreen: React.FC = () => {
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [regenerationProgress, setRegenerationProgress] = useState<{ current: number; total: number } | null>(null);
 
   const isTrainer = userData?.role === 'trainer';
   const isCompleted = worksheet?.status === 'completed';
@@ -303,20 +305,34 @@ const WorksheetScreen: React.FC = () => {
         }
       }
 
+      // Calculate total number of exercises to generate
+      const totalExercises = subjectData.topicAssignments.reduce((sum, assignment) => {
+        const topic = topicsMap.get(assignment.topicId);
+        return topic && topic.prompt ? sum + assignment.count : sum;
+      }, 0);
+
       // Generate new exercises from topic assignments using AI
       const exercises: Omit<Exercise, 'id'>[] = [];
       let exerciseOrder = 0;
+      let currentExerciseIndex = 0;
 
       for (const assignment of subjectData.topicAssignments) {
         const topic = topicsMap.get(assignment.topicId);
         if (!topic || !topic.prompt) continue;
 
         try {
-          // Generate exercises using AI
+          // Generate exercises using AI with progress callback
           const generatedExercises = await generateExercises(
             topic.prompt,
             topic.shortName,
-            assignment.count
+            assignment.count,
+            (current, total) => {
+              // Update progress: currentExerciseIndex + current exercises completed for this topic
+              setRegenerationProgress({
+                current: currentExerciseIndex + current,
+                total: totalExercises,
+              });
+            }
           );
 
           // Convert generated exercises to our format
@@ -328,6 +344,9 @@ const WorksheetScreen: React.FC = () => {
               order: exerciseOrder++,
             });
           });
+          
+          // Update current exercise index after completing this topic
+          currentExerciseIndex += assignment.count;
         } catch (error: any) {
           console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
           const errorMessage = error.message || 'Unknown error occurred';
@@ -344,6 +363,9 @@ const WorksheetScreen: React.FC = () => {
       // Create new worksheet
       const newWorksheetId = await createWorksheet(currentUser.uid, subject, exercises);
       
+      // Reset progress
+      setRegenerationProgress(null);
+      
       // Navigate to the new worksheet
       navigate(`/worksheet/${newWorksheetId}`);
     } catch (err: any) {
@@ -352,6 +374,9 @@ const WorksheetScreen: React.FC = () => {
       if (!regenerateError) {
         setRegenerateError(err.message || 'Failed to regenerate worksheet. Please try again or contact your trainer.');
       }
+      
+      // Reset progress on error
+      setRegenerationProgress(null);
     } finally {
       setRegenerating(false);
     }
@@ -401,16 +426,29 @@ const WorksheetScreen: React.FC = () => {
           />
         )}
         {worksheet.status === 'pending' && !isTrainer && (
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={regenerating ? <CircularProgress size={16} /> : <Refresh />}
-            onClick={handleRegenerateClick}
-            disabled={regenerating}
-            sx={{ ml: 'auto' }}
-          >
-            {regenerating ? 'Regenerating...' : 'Re-generate'}
-          </Button>
+          <Box sx={{ ml: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: '200px' }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={regenerating ? <CircularProgress size={16} /> : <Refresh />}
+              onClick={handleRegenerateClick}
+              disabled={regenerating}
+            >
+              {regenerating ? 'Regenerating...' : 'Re-generate'}
+            </Button>
+            {regenerationProgress && (
+              <Box sx={{ width: '100%' }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={(regenerationProgress.current / regenerationProgress.total) * 100}
+                  sx={{ height: 8, borderRadius: 1 }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
+                  {regenerationProgress.current} of {regenerationProgress.total} exercises
+                </Typography>
+              </Box>
+            )}
+          </Box>
         )}
       </Box>
 

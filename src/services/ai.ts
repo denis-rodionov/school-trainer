@@ -385,11 +385,16 @@ function extractAnswersFromMarkdown(markdown: string): string[] {
 
 /**
  * Generate multiple exercises for a topic
+ * @param topicPrompt - The prompt for generating exercises
+ * @param topicName - Name of the topic
+ * @param count - Number of exercises to generate
+ * @param onProgress - Optional callback for progress updates (current, total)
  */
 export const generateExercises = async (
   topicPrompt: string,
   topicName: string,
-  count: number
+  count: number,
+  onProgress?: (current: number, total: number) => void
 ): Promise<GeneratedExercise[]> => {
   const exercises: GeneratedExercise[] = [];
   let totalPromptTokens = 0;
@@ -405,6 +410,11 @@ export const generateExercises = async (
         exerciseNumber: i,
       });
       exercises.push(exercise);
+      
+      // Update progress
+      if (onProgress) {
+        onProgress(i, count);
+      }
       
       // Accumulate token usage
       if (exercise.tokenUsage) {

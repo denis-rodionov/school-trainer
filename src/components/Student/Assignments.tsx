@@ -16,6 +16,7 @@ import {
   Alert,
   IconButton,
   CircularProgress,
+  LinearProgress,
 } from '@mui/material';
 import { Delete } from '@mui/icons-material';
 import { SubjectData, Subject, Topic, Exercise } from '../../types';
@@ -52,6 +53,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const subjectName = subject.charAt(0).toUpperCase() + subject.slice(1);
 
@@ -102,20 +104,34 @@ const Assignments: React.FC<AssignmentsProps> = ({
         return;
       }
 
+      // Calculate total number of exercises to generate
+      const totalExercises = subjectData.topicAssignments.reduce((sum, assignment) => {
+        const topic = topics.get(assignment.topicId);
+        return topic && topic.prompt ? sum + assignment.count : sum;
+      }, 0);
+
       // Create exercises from topic assignments using AI generation
       const exercises: Omit<Exercise, 'id'>[] = [];
       let exerciseOrder = 0;
+      let currentExerciseIndex = 0;
 
       for (const assignment of subjectData.topicAssignments) {
         const topic = topics.get(assignment.topicId);
         if (!topic || !topic.prompt) continue;
 
         try {
-          // Generate exercises using AI
+          // Generate exercises using AI with progress callback
           const generatedExercises = await generateExercises(
             topic.prompt,
             topic.shortName,
-            assignment.count
+            assignment.count,
+            (current, total) => {
+              // Update progress: currentExerciseIndex + current exercises completed for this topic
+              setGenerationProgress({
+                current: currentExerciseIndex + current,
+                total: totalExercises,
+              });
+            }
           );
 
           // Convert generated exercises to our format
@@ -127,6 +143,9 @@ const Assignments: React.FC<AssignmentsProps> = ({
               order: exerciseOrder++,
             });
           });
+          
+          // Update current exercise index after completing this topic
+          currentExerciseIndex += assignment.count;
         } catch (error: any) {
           console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
           
@@ -148,6 +167,9 @@ const Assignments: React.FC<AssignmentsProps> = ({
       // Create worksheet
       const worksheetId = await createWorksheet(currentUser.uid, subject, exercises);
       
+      // Reset progress
+      setGenerationProgress(null);
+      
       // Navigate to worksheet page
       navigate(`/worksheet/${worksheetId}`);
     } catch (err: any) {
@@ -156,6 +178,9 @@ const Assignments: React.FC<AssignmentsProps> = ({
       if (!aiError) {
         setAiError(err.message || 'Failed to create worksheet. Please try again or contact your trainer.');
       }
+      
+      // Reset progress on error
+      setGenerationProgress(null);
     } finally {
       setGeneratingWorksheet(false);
     }
@@ -393,6 +418,18 @@ const Assignments: React.FC<AssignmentsProps> = ({
             >
               {generatingWorksheet ? 'Generating...' : 'Practice'}
             </Button>
+            {generationProgress && (
+              <Box sx={{ mt: 2 }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={(generationProgress.current / generationProgress.total) * 100}
+                  sx={{ height: 8, borderRadius: 1 }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
+                  {generationProgress.current} of {generationProgress.total} exercises
+                </Typography>
+              </Box>
+            )}
           </Box>
         )}
       </CardContent>
