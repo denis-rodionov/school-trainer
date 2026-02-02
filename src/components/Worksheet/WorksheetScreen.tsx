@@ -288,14 +288,15 @@ const WorksheetScreen: React.FC = () => {
       setRegenerating(true);
       setRegenerateError(null);
       
-      // Store subject before deletion
+      // Store subject and studentId before deletion
       const subject = worksheet.subject;
+      const studentId = worksheet.studentId; // Use the worksheet's studentId (works for both student and trainer)
       
       // Delete the current worksheet
       await deleteWorksheet(worksheetId);
       
-      // Get topic assignments for this subject
-      const subjectData = await getSubjectData(currentUser.uid, subject);
+      // Get topic assignments for this subject (use studentId, not currentUser.uid)
+      const subjectData = await getSubjectData(studentId, subject);
       if (!subjectData || !subjectData.topicAssignments.length) {
         throw new Error(t('error.noAssignments'));
       }
@@ -364,8 +365,8 @@ const WorksheetScreen: React.FC = () => {
         return;
       }
 
-      // Create new worksheet
-      const newWorksheetId = await createWorksheet(currentUser.uid, subject, exercises);
+      // Create new worksheet (use studentId, not currentUser.uid, so it works for trainers too)
+      const newWorksheetId = await createWorksheet(studentId, subject, exercises);
       
       // Reset progress
       setRegenerationProgress(null);
@@ -443,7 +444,7 @@ const WorksheetScreen: React.FC = () => {
             sx={{ ml: 2 }}
           />
         )}
-        {worksheet.status === 'pending' && !isTrainer && (
+        {worksheet.status === 'pending' && (
           <Box sx={{ ml: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: '200px' }}>
             <Button
               variant="outlined"
