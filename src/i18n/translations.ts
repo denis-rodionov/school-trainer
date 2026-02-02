@@ -50,6 +50,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'worksheet.regenerating': 'Regenerating...',
     'worksheet.regenerateConfirm': 'Are you sure you want to regenerate this worksheet?',
     'worksheet.regenerateWarning': 'This will delete the current worksheet and create a new one.',
+    'worksheet.print': 'Print',
     'worksheet.exercises': 'exercises',
     'worksheet.of': 'of',
     
@@ -224,6 +225,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'worksheet.regenerating': 'Пересоздание...',
     'worksheet.regenerateConfirm': 'Вы уверены, что хотите пересоздать этот рабочий лист?',
     'worksheet.regenerateWarning': 'Это удалит текущий рабочий лист и создаст новый.',
+    'worksheet.print': 'Печать',
     'worksheet.exercises': 'упражнений',
     'worksheet.of': 'из',
     
@@ -398,6 +400,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'worksheet.regenerating': 'Wird neu erstellt...',
     'worksheet.regenerateConfirm': 'Sind Sie sicher, dass Sie dieses Arbeitsblatt neu erstellen möchten?',
     'worksheet.regenerateWarning': 'Dies löscht das aktuelle Arbeitsblatt und erstellt ein neues.',
+    'worksheet.print': 'Drucken',
     'worksheet.exercises': 'Übungen',
     'worksheet.of': 'von',
     

@@ -15,7 +15,7 @@ import {
   DialogActions,
   LinearProgress,
 } from '@mui/material';
-import { ArrowBack, Refresh, Warning } from '@mui/icons-material';
+import { ArrowBack, Refresh, Warning, Print } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
@@ -37,6 +37,7 @@ import {
 import { generateExercises } from '../../services/ai';
 import { isWithinLastDays } from '../../utils/dateUtils';
 import { Timestamp } from 'firebase/firestore';
+import { printWorksheet } from '../../services/printing';
 
 const WorksheetScreen: React.FC = () => {
   const { worksheetId } = useParams<{ worksheetId: string }>();
@@ -279,6 +280,21 @@ const WorksheetScreen: React.FC = () => {
     setConfirmDialogOpen(true);
   };
 
+  const handlePrint = () => {
+    if (!worksheet || !exercises.length) return;
+    
+    printWorksheet({
+      worksheet,
+      exercises,
+      topicsMap,
+      translations: {
+        title: t('worksheet.title'),
+        score: t('worksheet.score'),
+        pending: t('dashboard.pending'),
+      },
+    });
+  };
+
   const handleRegenerate = async () => {
     if (!worksheet || !worksheetId || worksheet.status !== 'pending' || !currentUser) return;
     
@@ -444,31 +460,41 @@ const WorksheetScreen: React.FC = () => {
             sx={{ ml: 2 }}
           />
         )}
-        {worksheet.status === 'pending' && (
-          <Box sx={{ ml: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: '200px' }}>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={regenerating ? <CircularProgress size={16} /> : <Refresh />}
-              onClick={handleRegenerateClick}
-              disabled={regenerating}
-            >
-              {regenerating ? t('worksheet.regenerating') : t('worksheet.regenerate')}
-            </Button>
-            {regenerationProgress && (
-              <Box sx={{ width: '100%' }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={(regenerationProgress.current / regenerationProgress.total) * 100}
-                  sx={{ height: 8, borderRadius: 1 }}
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
-                  {regenerationProgress.current} of {regenerationProgress.total} exercises
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        )}
+        <Box sx={{ ml: 'auto', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<Print />}
+            onClick={handlePrint}
+          >
+            {t('worksheet.print')}
+          </Button>
+          {worksheet.status === 'pending' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: '200px' }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={regenerating ? <CircularProgress size={16} /> : <Refresh />}
+                onClick={handleRegenerateClick}
+                disabled={regenerating}
+              >
+                {regenerating ? t('worksheet.regenerating') : t('worksheet.regenerate')}
+              </Button>
+              {regenerationProgress && (
+                <Box sx={{ width: '100%' }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(regenerationProgress.current / regenerationProgress.total) * 100}
+                    sx={{ height: 8, borderRadius: 1 }}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
+                    {regenerationProgress.current} of {regenerationProgress.total} exercises
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
       </Box>
 
       {Object.entries(exercisesByTopic).map(([topicId, topicExercises]) => {
