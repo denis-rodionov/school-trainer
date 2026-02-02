@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { ArrowBack, Refresh, Warning } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import {
   getWorksheet,
   getExercises,
@@ -41,6 +42,7 @@ const WorksheetScreen: React.FC = () => {
   const { worksheetId } = useParams<{ worksheetId: string }>();
   const navigate = useNavigate();
   const { currentUser, userData } = useAuth();
+  const { t } = useLanguage();
   const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [topicsMap, setTopicsMap] = useState<Record<string, any>>({});
@@ -85,7 +87,7 @@ const WorksheetScreen: React.FC = () => {
         if (isTrainer && worksheetData.studentId !== currentUser?.uid) {
           // Trainer viewing student's worksheet - this is allowed
         } else if (!isTrainer && worksheetData.studentId !== currentUser?.uid) {
-          setError('You do not have permission to view this worksheet');
+          setError(t('error.noPermission'));
           return;
         }
 
@@ -123,7 +125,7 @@ const WorksheetScreen: React.FC = () => {
           setAnswers(new Array(totalGaps).fill(''));
         }
       } catch (err: any) {
-        setError(err.message || 'Failed to load worksheet');
+        setError(err.message || t('error.failedToLoadWorksheet'));
       } finally {
         setLoading(false);
       }
@@ -267,7 +269,7 @@ const WorksheetScreen: React.FC = () => {
       setWorksheet(updatedWorksheet);
       setSubmitted(false);
     } catch (err: any) {
-      alert(err.message || 'Failed to submit worksheet');
+      alert(err.message || t('error.failedToSubmitWorksheet'));
     } finally {
       setSaving(false);
     }
@@ -295,7 +297,7 @@ const WorksheetScreen: React.FC = () => {
       // Get topic assignments for this subject
       const subjectData = await getSubjectData(currentUser.uid, subject);
       if (!subjectData || !subjectData.topicAssignments.length) {
-        throw new Error('No topic assignments found for this subject. Please contact your trainer.');
+        throw new Error(t('error.noAssignments'));
       }
 
       // Load topics
@@ -351,14 +353,14 @@ const WorksheetScreen: React.FC = () => {
           currentExerciseIndex += assignment.count;
         } catch (error: any) {
           console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
-          const errorMessage = error.message || 'Unknown error occurred';
-          setRegenerateError(`Failed to generate exercises for topic "${topic.shortName}": ${errorMessage}`);
+          const errorMessage = error.message || t('error.unknownError');
+          setRegenerateError(`${t('error.failedToGenerate')} "${topic.shortName}": ${errorMessage}`);
           throw error; // Stop worksheet creation
         }
       }
 
       if (exercises.length === 0) {
-        setRegenerateError('No exercises could be generated. Please contact your trainer.');
+        setRegenerateError(t('error.noExercisesGenerated'));
         return;
       }
 
@@ -377,7 +379,7 @@ const WorksheetScreen: React.FC = () => {
       console.error('Failed to regenerate worksheet:', err);
       // Show error but stay on the page
       if (!regenerateError) {
-        setRegenerateError(err.message || 'Failed to regenerate worksheet. Please try again or contact your trainer.');
+        setRegenerateError(err.message || t('error.failedToRegenerateWorksheet'));
       }
       
       // Reset progress on error
@@ -409,7 +411,7 @@ const WorksheetScreen: React.FC = () => {
   }
 
   if (!worksheet) {
-    return <Alert severity="error">Worksheet not found</Alert>;
+    return <Alert severity="error">{t('error.worksheetNotFound')}</Alert>;
   }
 
   return (
@@ -431,12 +433,12 @@ const WorksheetScreen: React.FC = () => {
           }}
           sx={{ mr: 2 }}
         >
-          Back
+          {t('common.back')}
         </Button>
-        <Typography variant="h4">Worksheet</Typography>
+        <Typography variant="h4">{t('worksheet.title')}</Typography>
         {worksheet.status === 'completed' && worksheet.score !== undefined && (
           <Chip
-            label={`Score: ${Math.round(worksheet.score)}%`}
+            label={`${t('worksheet.score')}: ${Math.round(worksheet.score)}%`}
             color={worksheet.score >= 80 ? 'success' : worksheet.score >= 60 ? 'warning' : 'error'}
             sx={{ ml: 2 }}
           />
@@ -450,7 +452,7 @@ const WorksheetScreen: React.FC = () => {
               onClick={handleRegenerateClick}
               disabled={regenerating}
             >
-              {regenerating ? 'Regenerating...' : 'Re-generate'}
+              {regenerating ? t('worksheet.regenerating') : t('worksheet.regenerate')}
             </Button>
             {regenerationProgress && (
               <Box sx={{ width: '100%' }}>
@@ -529,7 +531,7 @@ const WorksheetScreen: React.FC = () => {
             disabled={saving || answers.some((a) => !a.trim())}
             size="large"
           >
-            {saving ? 'Submitting...' : submitted ? 'Re-submit' : 'Submit'}
+            {saving ? t('worksheet.submit') + '...' : submitted ? t('worksheet.submit') : t('worksheet.submit')}
           </Button>
         </Box>
       )}
@@ -542,16 +544,16 @@ const WorksheetScreen: React.FC = () => {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Warning color="warning" />
-          Regenerate Worksheet
+          {t('worksheet.regenerate')}
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Delete this worksheet and create a new one?
+            {t('worksheet.regenerateConfirm')} {t('worksheet.regenerateWarning')}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDialogOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleRegenerate}
@@ -559,7 +561,7 @@ const WorksheetScreen: React.FC = () => {
             color="primary"
             disabled={regenerating}
           >
-            Regenerate
+            {t('worksheet.regenerate')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -10,7 +10,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { User, SubjectData, Subject, SubjectStatistics, TopicAssignment } from '../types';
+import { User, SubjectData, Subject, SubjectStatistics, TopicAssignment, Language } from '../types';
 
 export const getUsers = async (): Promise<User[]> => {
   const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -68,4 +68,9 @@ export const updateSubjectTopicAssignments = async (
 export const getUserSubjects = async (uid: string): Promise<Subject[]> => {
   const subjectsSnapshot = await getDocs(collection(db, 'users', uid, 'subjects'));
   return subjectsSnapshot.docs.map((doc) => doc.id);
+};
+
+export const updateUserLanguage = async (uid: string, language: Language): Promise<void> => {
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, { language });
 };

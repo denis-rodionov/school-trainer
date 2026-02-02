@@ -16,8 +16,10 @@ import {
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { register } from '../../services/auth';
 import { UserRole } from '../../types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const Register: React.FC = () => {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,12 +34,12 @@ const Register: React.FC = () => {
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('error.passwordsDoNotMatch'));
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('error.passwordTooShort'));
       return;
     }
 
@@ -52,7 +54,7 @@ const Register: React.FC = () => {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to register');
+      setError(err.message || t('error.failedToRegister'));
     } finally {
       setLoading(false);
     }
@@ -70,7 +72,7 @@ const Register: React.FC = () => {
       >
         <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
           <Typography component="h1" variant="h5" align="center" gutterBottom>
-            Register
+            {t('auth.register')}
           </Typography>
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -82,7 +84,7 @@ const Register: React.FC = () => {
               margin="normal"
               fullWidth
               id="displayName"
-              label="Display Name (optional)"
+              label={t('auth.displayNameOptional')}
               name="displayName"
               autoComplete="name"
               autoFocus
@@ -94,23 +96,23 @@ const Register: React.FC = () => {
               required
               fullWidth
               id="email"
-              label="Email Address"
+              label={t('auth.emailAddress')}
               name="email"
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
             <FormControl fullWidth margin="normal" required>
-              <InputLabel id="role-label">Role</InputLabel>
+              <InputLabel id="role-label">{t('auth.role')}</InputLabel>
               <Select
                 labelId="role-label"
                 id="role"
                 value={role}
-                label="Role"
+                label={t('auth.role')}
                 onChange={(e) => setRole(e.target.value as UserRole)}
               >
-                <MenuItem value="student">Student</MenuItem>
-                <MenuItem value="trainer">Trainer</MenuItem>
+                <MenuItem value="student">{t('auth.student')}</MenuItem>
+                <MenuItem value="trainer">{t('auth.trainer')}</MenuItem>
               </Select>
             </FormControl>
             <TextField
@@ -118,7 +120,7 @@ const Register: React.FC = () => {
               required
               fullWidth
               name="password"
-              label="Password"
+              label={t('auth.password')}
               type="password"
               id="password"
               autoComplete="new-password"
@@ -130,7 +132,7 @@ const Register: React.FC = () => {
               required
               fullWidth
               name="confirmPassword"
-              label="Confirm Password"
+              label={t('auth.confirmPassword')}
               type="password"
               id="confirmPassword"
               value={confirmPassword}
@@ -143,11 +145,11 @@ const Register: React.FC = () => {
               sx={{ mt: 3, mb: 2 }}
               disabled={loading}
             >
-              {loading ? 'Registering...' : 'Register'}
+              {loading ? t('auth.registering') : t('auth.register')}
             </Button>
             <Box textAlign="center">
               <Link component={RouterLink} to="/login" variant="body2">
-                Already have an account? Login
+                {t('auth.alreadyHaveAccount')}
               </Link>
             </Box>
           </Box>

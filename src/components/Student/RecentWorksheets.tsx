@@ -14,6 +14,7 @@ import { Worksheet } from '../../types';
 import { formatWorksheetDate } from '../../utils/dateUtils';
 import { Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface RecentWorksheetsProps {
   worksheets: Worksheet[];
@@ -24,6 +25,7 @@ const RecentWorksheets: React.FC<RecentWorksheetsProps> = ({
   worksheets,
   subjectName,
 }) => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const handleWorksheetClick = (worksheetId: string) => {
@@ -53,19 +55,19 @@ const RecentWorksheets: React.FC<RecentWorksheetsProps> = ({
             borderColor: 'primary.main',
           }}
         >
-          Recent Worksheets - {subjectName}
+          {t('dashboard.recentWorksheetsTitle')} - {subjectName}
         </Typography>
 
         {worksheets.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-            No worksheets yet
+            {t('dashboard.noWorksheets')}
           </Typography>
         ) : (
           <List sx={{ pt: 1 }}>
             {worksheets.map((worksheet) => {
               const isPending = worksheet.status === 'pending';
               const dateToFormat = isPending ? worksheet.createdAt : worksheet.completedAt;
-              let formattedDate = 'Unknown date';
+              let formattedDate = t('common.unknownDate');
               if (dateToFormat) {
                 let dateObj: Date;
                 if (dateToFormat.toDate) {
@@ -105,7 +107,7 @@ const RecentWorksheets: React.FC<RecentWorksheetsProps> = ({
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                     {isPending ? (
                       <Chip
-                        label="pending"
+                        label={t('dashboard.pending')}
                         color="warning"
                         size="small"
                         sx={{

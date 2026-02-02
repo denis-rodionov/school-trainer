@@ -12,6 +12,7 @@ import { SubjectData, Subject } from '../../types';
 import { getTopic } from '../../services/topics';
 import { useEffect, useState } from 'react';
 import { Topic } from '../../types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface TopicAssignmentsProps {
   subject: Subject;
@@ -24,6 +25,7 @@ const TopicAssignments: React.FC<TopicAssignmentsProps> = ({
   subjectData,
   isReadOnly = false,
 }) => {
+  const { t } = useLanguage();
   const [topics, setTopics] = useState<Map<string, Topic>>(new Map());
   const [loading, setLoading] = useState(true);
 
@@ -59,13 +61,13 @@ const TopicAssignments: React.FC<TopicAssignmentsProps> = ({
   }, [subjectData]);
 
   if (loading) {
-    return <Typography variant="body2">Loading assignments...</Typography>;
+    return <Typography variant="body2">{t('common.loading')}</Typography>;
   }
 
   if (!subjectData || !subjectData.topicAssignments.length) {
     return (
       <Typography variant="body2" color="text.secondary">
-        No topics assigned yet
+        {t('dashboard.noAssignments')}
       </Typography>
     );
   }
@@ -93,7 +95,7 @@ const TopicAssignments: React.FC<TopicAssignmentsProps> = ({
           borderColor: 'primary.light',
         }}
       >
-        Topic Assignments
+        {t('assignments.title')}
       </Typography>
       <List sx={{ pt: 1 }}>
         {subjectData.topicAssignments.map((assignment) => {
@@ -108,11 +110,11 @@ const TopicAssignments: React.FC<TopicAssignmentsProps> = ({
               }}
             >
               <ListItemText
-                primary={topic?.shortName || `Topic ${assignment.topicId}`}
-                secondary={topic?.taskDescription || 'No description'}
+                primary={topic?.shortName || `${t('topics.title')} ${assignment.topicId}`}
+                secondary={topic?.taskDescription || t('assignments.noDescription')}
               />
               <Chip
-                label={`${assignment.count} exercises`}
+                label={`${assignment.count} ${t('assignments.exercises')}`}
                 size="small"
                 color="primary"
               />

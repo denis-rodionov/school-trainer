@@ -26,6 +26,8 @@ import { updateSubjectTopicAssignments } from '../../services/users';
 import { createWorksheet, getPendingWorksheetBySubject } from '../../services/worksheets';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 import { extractGaps } from '../../utils/markdownParser';
 import { generateExercises } from '../../services/ai';
 
@@ -47,6 +49,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
   onUpdate,
 }) => {
   const { currentUser } = useAuth();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [topics, setTopics] = useState<Map<string, Topic>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -55,7 +58,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
   const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
-  const subjectName = subject.charAt(0).toUpperCase() + subject.slice(1);
+  const subjectName = translateSubject(subject, language);
 
   useEffect(() => {
     const loadTopics = async () => {
@@ -150,8 +153,8 @@ const Assignments: React.FC<AssignmentsProps> = ({
           console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
           
           // Show detailed error message to user
-          const errorMessage = error.message || 'Unknown error occurred';
-          setAiError(`Failed to generate exercises for topic "${topic.shortName}": ${errorMessage}`);
+          const errorMessage = error.message || t('error.unknownError');
+          setAiError(`${t('error.failedToGenerate')} "${topic.shortName}": ${errorMessage}`);
           
           // Don't create placeholder exercises - let user know there's an issue
           // They can try again or contact their trainer
@@ -160,7 +163,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
       }
 
       if (exercises.length === 0) {
-        setAiError('No exercises could be generated. Please contact your trainer.');
+        setAiError(t('error.noExercisesGenerated'));
         return;
       }
 
@@ -176,7 +179,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
       console.error('Failed to create worksheet:', err);
       // Error message already set in catch block above, or set it here if it's a different error
       if (!aiError) {
-        setAiError(err.message || 'Failed to create worksheet. Please try again or contact your trainer.');
+        setAiError(err.message || t('error.failedToCreateWorksheet'));
       }
       
       // Reset progress on error
@@ -226,10 +229,10 @@ const Assignments: React.FC<AssignmentsProps> = ({
               borderColor: 'error.main',
             }}
           >
-            Assignments - {subjectName}
+            {t('assignments.title')} - {subjectName}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-            No topics assigned yet
+            {t('dashboard.noAssignments')}
           </Typography>
           {onPractice && (
             <Button
@@ -276,16 +279,16 @@ const Assignments: React.FC<AssignmentsProps> = ({
             borderColor: 'error.main',
           }}
         >
-          Assignments - {subjectName}
+          {t('assignments.title')} - {subjectName}
         </Typography>
 
         {subjectData && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Worksheets completed in last 7 days: {subjectData.statistics.worksheetsLast7Days}
+              {t('dashboard.worksheetsCompletedLast7Days')}: {subjectData.statistics.worksheetsLast7Days}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Last worksheet: {formatWorksheetDate(subjectData.statistics.lastWorksheetDate)}
+              {t('dashboard.lastWorksheet')}: {formatWorksheetDate(subjectData.statistics.lastWorksheetDate)}
             </Typography>
           </Box>
         )}
@@ -309,7 +312,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 }
               } catch (err: any) {
                 console.error('Failed to update assignment:', err);
-                alert(err.message || 'Failed to update assignment');
+                alert(err.message || t('error.failedToUpdateAssignment'));
               } finally {
                 setSaving(false);
               }
@@ -318,7 +321,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
             const handleDelete = async () => {
               if (!propStudentId || isReadOnly) return;
               
-              if (!window.confirm(`Are you sure you want to remove "${topic?.shortName || 'this topic'}" from assignments?`)) {
+              if (!window.confirm(t('common.deleteConfirm'))) {
                 return;
               }
               
@@ -335,7 +338,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 }
               } catch (err: any) {
                 console.error('Failed to delete assignment:', err);
-                alert(err.message || 'Failed to delete assignment');
+                alert(err.message || t('error.failedToDeleteAssignment'));
               } finally {
                 setSaving(false);
               }
@@ -355,22 +358,22 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 }}
               >
                 <ListItemText
-                  primary={topic?.shortName || `Topic ${assignment.topicId}`}
-                  secondary={topic?.taskDescription || 'No description'}
+                  primary={topic?.shortName || `${t('topics.title')} ${assignment.topicId}`}
+                  secondary={topic?.taskDescription || t('assignments.noDescription')}
                   sx={{ flex: 1 }}
                 />
                 <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{ minWidth: 120 }}>
                     {isReadOnly ? (
                       <Typography variant="body2" color="text.secondary">
-                        {assignment.count} exercises
+                        {assignment.count} {t('assignments.exercises')}
                       </Typography>
                     ) : (
                       <FormControl size="small" fullWidth>
-                        <InputLabel>Exercises</InputLabel>
+                        <InputLabel>{t('assignments.exercises')}</InputLabel>
                         <Select
                           value={assignment.count}
-                          label="Exercises"
+                          label={t('assignments.exercises')}
                           onChange={(e) => handleCountChange(Number(e.target.value))}
                           disabled={saving}
                         >
@@ -416,7 +419,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
               }}
               startIcon={generatingWorksheet ? <CircularProgress size={20} color="inherit" /> : null}
             >
-              {generatingWorksheet ? 'Generating...' : 'Practice'}
+              {generatingWorksheet ? t('assignments.generating') : t('assignments.practice')}
             </Button>
             {generationProgress && (
               <Box sx={{ mt: 2 }}>
@@ -426,7 +429,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
                   sx={{ height: 8, borderRadius: 1 }}
                 />
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
-                  {generationProgress.current} of {generationProgress.total} exercises
+                  {generationProgress.current} {t('worksheet.of')} {generationProgress.total} {t('worksheet.exercises')}
                 </Typography>
               </Box>
             )}

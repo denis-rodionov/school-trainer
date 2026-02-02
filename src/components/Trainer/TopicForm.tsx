@@ -23,6 +23,8 @@ import { Science, Refresh, Translate } from '@mui/icons-material';
 import { Topic, Subject } from '../../types';
 import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 import { generateExercise } from '../../services/ai';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 import { translateToGerman } from '../../services/translation';
@@ -36,6 +38,7 @@ interface TopicFormProps {
 
 const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) => {
   const { currentUser } = useAuth();
+  const { t, language } = useLanguage();
   const [subject, setSubject] = useState<Subject>('');
   const [shortName, setShortName] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
@@ -96,19 +99,19 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     const newErrors: Record<string, string> = {};
 
     if (!subject.trim()) {
-      newErrors.subject = 'Subject is required';
+      newErrors.subject = t('validation.subjectRequired');
     }
 
     if (!shortName.trim()) {
-      newErrors.shortName = 'Short name is required';
+      newErrors.shortName = t('validation.shortNameRequired');
     }
 
     if (!taskDescription.trim()) {
-      newErrors.taskDescription = 'Task description is required';
+      newErrors.taskDescription = t('validation.taskDescriptionRequired');
     }
 
     if (!prompt.trim()) {
-      newErrors.prompt = 'Prompt is required';
+      newErrors.prompt = t('validation.promptRequired');
     }
 
     setErrors(newErrors);
@@ -146,7 +149,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       
       setTranslatedField(field);
     } catch (err: any) {
-      alert(err.message || 'Failed to translate');
+      alert(err.message || t('error.failedToTranslate'));
     } finally {
       setTranslating(prev => ({ ...prev, [field]: false }));
     }
@@ -177,7 +180,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       
       const result = await generateExercise({
         prompt: prompt.trim(),
-        topicName: shortName.trim() || 'Test Topic',
+        topicName: shortName.trim() || t('topics.testExercise'),
         exerciseNumber: defaultExerciseCount || 1,
       });
 
@@ -190,7 +193,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       const textContent = tempDiv.textContent || tempDiv.innerText || '';
       setTestExercise(textContent);
     } catch (err: any) {
-      setTestError(err.message || 'Failed to generate test exercise');
+      setTestError(err.message || t('error.failedToGenerateTest'));
       setTestExercise(null);
       setTestExerciseMarkdown(null);
     } finally {
@@ -231,7 +234,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{topic ? 'Edit Topic' : 'Create Topic'}</DialogTitle>
+      <DialogTitle>{topic ? t('topics.edit') : t('topics.create')}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <Grid container spacing={2} alignItems="flex-start">
@@ -241,10 +244,14 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                 options={availableSubjects}
                 value={subject}
                 onInputChange={(_, newValue) => setSubject(newValue)}
+                getOptionLabel={(option) => {
+                  // Display translated subject name in dropdown, but store constant value
+                  return translateSubject(option, language);
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Subject"
+                    label={t('topics.subject')}
                     required
                     error={!!errors.subject}
                     helperText={errors.subject}
@@ -257,7 +264,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
 
             <Grid item xs={12} sm={10}>
               <TextField
-                label="Short Name"
+                label={t('topics.shortName')}
                 value={shortName}
                 onChange={(e) => setShortName(e.target.value)}
                 required
@@ -275,13 +282,13 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                 disabled={translating.shortName || (!shortName.trim() && translatedField !== 'shortName')}
                 fullWidth
               >
-                {translatedField === 'shortName' ? 'Revert' : 'DE'}
+                {translatedField === 'shortName' ? t('topics.revert') : t('topics.translate')}
               </Button>
             </Grid>
 
             <Grid item xs={12} sm={10}>
               <TextField
-                label="Task Description"
+                label={t('topics.taskDescription')}
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
                 required
@@ -301,13 +308,13 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                 disabled={translating.taskDescription || (!taskDescription.trim() && translatedField !== 'taskDescription')}
                 fullWidth
               >
-                {translatedField === 'taskDescription' ? 'Revert' : 'DE'}
+                {translatedField === 'taskDescription' ? t('topics.revert') : t('topics.translate')}
               </Button>
             </Grid>
 
             <Grid item xs={12} sm={10}>
               <TextField
-                label="Prompt (for AI generation)"
+                label={t('topics.prompt')}
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
@@ -332,7 +339,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                 disabled={translating.prompt || (!prompt.trim() && translatedField !== 'prompt')}
                 fullWidth
               >
-                {translatedField === 'prompt' ? 'Revert' : 'DE'}
+                {translatedField === 'prompt' ? t('topics.revert') : t('topics.translate')}
               </Button>
             </Grid>
           </Grid>
@@ -340,10 +347,10 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
           <Grid container spacing={2}>
             <Grid item xs={12} sm={10}>
               <FormControl fullWidth>
-                <InputLabel>Default Exercise Count</InputLabel>
+                <InputLabel>{t('topics.defaultExerciseCount')}</InputLabel>
                 <Select
                   value={defaultExerciseCount}
-                  label="Default Exercise Count"
+                  label={t('topics.defaultExerciseCount')}
                   onChange={(e) => setDefaultExerciseCount(Number(e.target.value))}
                 >
                   {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
@@ -366,7 +373,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
               disabled={testingExercise || !prompt.trim() || !shortName.trim()}
               fullWidth
             >
-              {testingExercise ? 'Generating...' : testExercise ? 'Regenerate Test' : 'Test Exercise'}
+              {testingExercise ? t('assignments.generating') : testExercise ? t('topics.regenerateTest') : t('topics.testExercise')}
             </Button>
 
             {testError && (
@@ -378,7 +385,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
             {testExerciseMarkdown && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
-                  Test Exercise Preview:
+                  {t('topics.testExercisePreview')}
                 </Typography>
                 <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
                   <TestExercisePreview markdown={testExerciseMarkdown} />
@@ -389,9 +396,9 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button onClick={handleSave} variant="contained">
-          Save
+          {t('common.save')}
         </Button>
       </DialogActions>
     </Dialog>

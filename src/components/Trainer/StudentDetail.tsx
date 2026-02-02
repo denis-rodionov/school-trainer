@@ -17,10 +17,13 @@ import Assignments from '../Student/Assignments';
 import RecentWorksheets from '../Student/RecentWorksheets';
 import AssignTopicsDialog from './AssignTopicsDialog';
 import { getTopics } from '../../services/topics';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 
 const StudentDetail: React.FC = () => {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [student, setStudent] = useState<User | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectsData, setSubjectsData] = useState<Map<Subject, SubjectData>>(new Map());
@@ -74,7 +77,7 @@ const StudentDetail: React.FC = () => {
         setSubjectsData(dataMap);
         setWorksheets(worksheetsMap);
       } catch (err: any) {
-        setError(err.message || 'Failed to load student data');
+        setError(err.message || t('error.failedToLoadStudentData'));
       } finally {
         setLoading(false);
       }
@@ -113,7 +116,7 @@ const StudentDetail: React.FC = () => {
 
         setSubjectsData(dataMap);
       } catch (err: any) {
-        setError(err.message || 'Failed to reload data');
+        setError(err.message || t('error.failedToReloadData'));
       }
     };
     loadData();
@@ -148,7 +151,7 @@ const StudentDetail: React.FC = () => {
             onClick={() => navigate('/students')}
             sx={{ mr: 2 }}
           >
-            Back
+            {t('common.back')}
           </Button>
           <Typography variant="h4">
             {student.displayName || student.email}
@@ -159,7 +162,7 @@ const StudentDetail: React.FC = () => {
           startIcon={<Assignment />}
           onClick={handleAssignClick}
         >
-          Assign Topics
+          {t('studentDetail.assignTopics')}
         </Button>
       </Box>
 
@@ -169,7 +172,7 @@ const StudentDetail: React.FC = () => {
             {subjects.map((subject, index) => (
               <Tab 
                 key={subject} 
-                label={subject.charAt(0).toUpperCase() + subject.slice(1)} 
+                label={translateSubject(subject, language)} 
               />
             ))}
           </Tabs>
@@ -188,14 +191,14 @@ const StudentDetail: React.FC = () => {
               {/* Recent Worksheets Component */}
               <RecentWorksheets 
                 worksheets={currentWorksheets} 
-                subjectName={currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)} 
+                subjectName={translateSubject(currentSubject, language)} 
               />
             </Box>
           )}
         </>
       ) : (
         <Alert severity="info">
-          No subjects assigned yet. Click "Assign Topics" to get started.
+          {t('studentDetail.noSubjectsAssigned')}
         </Alert>
       )}
 

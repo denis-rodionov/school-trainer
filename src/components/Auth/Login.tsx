@@ -12,8 +12,10 @@ import {
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { login } from '../../services/auth';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const Login: React.FC = () => {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -41,7 +43,7 @@ const Login: React.FC = () => {
       await login(email, password);
       // Navigation will happen via useEffect when userData is set
     } catch (err: any) {
-      setError(err.message || 'Failed to log in');
+      setError(err.message || t('error.failedToLogin'));
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,7 @@ const Login: React.FC = () => {
       >
         <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
           <Typography component="h1" variant="h5" align="center" gutterBottom>
-            Login
+            {t('auth.login')}
           </Typography>
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -72,7 +74,7 @@ const Login: React.FC = () => {
               required
               fullWidth
               id="email"
-              label="Email Address"
+              label={t('auth.emailAddress')}
               name="email"
               autoComplete="email"
               autoFocus
@@ -84,7 +86,7 @@ const Login: React.FC = () => {
               required
               fullWidth
               name="password"
-              label="Password"
+              label={t('auth.password')}
               type="password"
               id="password"
               autoComplete="current-password"
@@ -98,11 +100,11 @@ const Login: React.FC = () => {
               sx={{ mt: 3, mb: 2 }}
               disabled={loading}
             >
-              {loading ? 'Logging in...' : 'Sign In'}
+              {loading ? t('auth.loggingIn') : t('auth.signIn')}
             </Button>
             <Box textAlign="center">
               <Link component={RouterLink} to="/register" variant="body2">
-                Don't have an account? Register
+                {t('auth.dontHaveAccount')}
               </Link>
             </Box>
           </Box>

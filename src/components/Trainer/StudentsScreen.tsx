@@ -12,8 +12,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getStudents } from '../../services/users';
 import { User } from '../../types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const StudentsScreen: React.FC = () => {
+  const { t } = useLanguage();
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,7 +31,7 @@ const StudentsScreen: React.FC = () => {
       const allStudents = await getStudents();
       setStudents(allStudents);
     } catch (err: any) {
-      setError(err.message || 'Failed to load students');
+      setError(err.message || t('error.failedToLoadStudents'));
     } finally {
       setLoading(false);
     }
@@ -54,11 +56,11 @@ const StudentsScreen: React.FC = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Students
+        {t('students.title')}
       </Typography>
       {students.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          No students found
+          {t('students.noStudents')}
         </Typography>
       ) : (
         <List>

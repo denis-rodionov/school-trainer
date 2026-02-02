@@ -16,8 +16,11 @@ import { Add, Edit, Delete } from '@mui/icons-material';
 import { getTopics, deleteTopic } from '../../services/topics';
 import { Topic, Subject } from '../../types';
 import TopicForm from './TopicForm';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 
 const TopicsScreen: React.FC = () => {
+  const { t, language } = useLanguage();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -34,7 +37,7 @@ const TopicsScreen: React.FC = () => {
       const allTopics = await getTopics();
       setTopics(allTopics);
     } catch (err: any) {
-      setError(err.message || 'Failed to load topics');
+      setError(err.message || t('error.failedToLoadTopics'));
     } finally {
       setLoading(false);
     }
@@ -51,7 +54,7 @@ const TopicsScreen: React.FC = () => {
   };
 
   const handleDelete = async (topicId: string) => {
-    if (!window.confirm('Are you sure you want to delete this topic?')) {
+    if (!window.confirm(t('topics.deleteConfirm'))) {
       return;
     }
 
@@ -59,7 +62,7 @@ const TopicsScreen: React.FC = () => {
       await deleteTopic(topicId);
       await loadTopics();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete topic');
+      alert(err.message || t('error.failedToDeleteTopic'));
     }
   };
 
@@ -94,9 +97,9 @@ const TopicsScreen: React.FC = () => {
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Topics</Typography>
+        <Typography variant="h4">{t('topics.title')}</Typography>
         <Button variant="contained" startIcon={<Add />} onClick={handleCreate}>
-          Create Topic
+          {t('topics.create')}
         </Button>
       </Box>
 
@@ -104,7 +107,7 @@ const TopicsScreen: React.FC = () => {
 
       {subjectNames.length === 0 ? (
         <Alert severity="info" sx={{ mt: 3 }}>
-          No topics yet. Create your first topic to get started.
+          {t('topics.noTopicsYet')}
         </Alert>
       ) : (
         subjectNames.map((subjectName, index) => {
@@ -112,11 +115,11 @@ const TopicsScreen: React.FC = () => {
           return (
             <Box key={subjectName}>
               <Typography variant="h5" gutterBottom sx={{ mt: index === 0 ? 3 : 4 }}>
-                {subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
+                {translateSubject(subjectName, language)}
               </Typography>
               {subjectTopics.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  No {subjectName} topics yet
+                  {t('topics.noTopicsForSubject').replace('{subject}', translateSubject(subjectName, language))}
                 </Typography>
               ) : (
                 <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -127,7 +130,7 @@ const TopicsScreen: React.FC = () => {
                           <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
                             <Typography variant="h6">{topic.shortName}</Typography>
                             <Chip 
-                              label={subjectName.charAt(0).toUpperCase() + subjectName.slice(1)} 
+                              label={translateSubject(subjectName, language)} 
                               size="small" 
                               color={index % 2 === 0 ? 'primary' : 'secondary'} 
                             />
@@ -136,7 +139,7 @@ const TopicsScreen: React.FC = () => {
                             {topic.taskDescription}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            Prompt: {topic.prompt.substring(0, 50)}...
+                            {t('topics.promptLabel')} {topic.prompt.substring(0, 50)}...
                           </Typography>
                         </CardContent>
                         <CardActions>

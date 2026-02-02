@@ -22,6 +22,8 @@ import { Add, Remove } from '@mui/icons-material';
 import { Subject, Topic, TopicAssignment } from '../../types';
 import { getTopics } from '../../services/topics';
 import { getSubjectData, updateSubjectTopicAssignments, setSubjectData } from '../../services/users';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 
 const DEFAULT_EXERCISE_NUMBER = 3;
 
@@ -38,6 +40,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
   onSave,
   studentId,
 }) => {
+  const { t, language } = useLanguage();
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
   const [filteredTopics, setFilteredTopics] = useState<Topic[]>([]);
   const [assignments, setAssignments] = useState<Map<string, TopicAssignment>>(new Map()); // topicId -> assignment
@@ -74,7 +77,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
 
         setAssignments(assignmentsMap);
       } catch (err: any) {
-        setError(err.message || 'Failed to load data');
+        setError(err.message || t('error.failedToLoadData'));
       } finally {
         setLoading(false);
       }
@@ -140,7 +143,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
 
       onSave(); // Refresh the parent component
     } catch (err: any) {
-      setError(err.message || 'Failed to assign topic');
+      setError(err.message || t('error.failedToAssignTopic'));
       // Revert local state on error
       const newAssignments = new Map(assignments);
       newAssignments.delete(topic.id);
@@ -168,7 +171,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
 
       onSave(); // Refresh the parent component
     } catch (err: any) {
-      setError(err.message || 'Failed to unassign topic');
+      setError(err.message || t('error.failedToUnassignTopic'));
       // Revert local state on error
       const assignment = assignments.get(topic.id);
       if (assignment) {
@@ -183,7 +186,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Assign Topics</DialogTitle>
+      <DialogTitle>{t('assignTopics.title')}</DialogTitle>
       <DialogContent
         sx={{
           minHeight: '500px',
@@ -200,33 +203,33 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-            <Typography>Loading...</Typography>
+            <Typography>{t('common.loading')}</Typography>
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {/* Filters */}
             <Box sx={{ display: 'flex', gap: 2, mb: 3, mt: 2, flexShrink: 0 }}>
               <FormControl sx={{ minWidth: 200 }}>
-                <InputLabel>Filter by Subject</InputLabel>
+                <InputLabel>{t('assignTopics.filterBySubject')}</InputLabel>
                 <Select
                   value={subjectFilter}
-                  label="Filter by Subject"
+                  label={t('assignTopics.filterBySubject')}
                   onChange={(e) => setSubjectFilter(e.target.value)}
                 >
-                  <MenuItem value="">All Subjects</MenuItem>
+                  <MenuItem value="">{t('assignTopics.allSubjects')}</MenuItem>
                   {availableSubjects.map((subject) => (
                     <MenuItem key={subject} value={subject}>
-                      {subject.charAt(0).toUpperCase() + subject.slice(1)}
+                      {translateSubject(subject, language)}
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
               <TextField
                 fullWidth
-                label="Search Topics"
+                label={t('assignTopics.searchTopics')}
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                placeholder="Search by name or description..."
+                placeholder={t('assignTopics.searchPlaceholder')}
               />
             </Box>
 
@@ -253,8 +256,8 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
                   <Typography variant="body2" color="text.secondary">
                     {searchText || subjectFilter
-                      ? 'No topics found matching your filters'
-                      : 'No topics available'}
+                      ? t('assignTopics.noTopicsFound')
+                      : t('assignTopics.noTopicsAvailable')}
                   </Typography>
                 </Box>
               ) : (
@@ -283,7 +286,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
                               {topic.taskDescription}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Subject: {topic.subject.charAt(0).toUpperCase() + topic.subject.slice(1)}
+                              {t('assignTopics.subject')} {translateSubject(topic.subject, language)}
                             </Typography>
                           </Box>
                         }
@@ -318,7 +321,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>{t('assignTopics.close')}</Button>
       </DialogActions>
     </Dialog>
   );

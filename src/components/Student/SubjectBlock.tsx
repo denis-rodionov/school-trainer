@@ -13,6 +13,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Subject, SubjectData, Worksheet } from '../../types';
 import { formatWorksheetDate } from '../../utils/dateUtils';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 
 interface SubjectBlockProps {
   subject: Subject;
@@ -30,7 +32,8 @@ const SubjectBlock: React.FC<SubjectBlockProps> = ({
   isReadOnly = false,
 }) => {
   const navigate = useNavigate();
-  const subjectName = subject === 'math' ? 'Math' : 'German';
+  const { language } = useLanguage();
+  const subjectName = translateSubject(subject, language);
 
   const handleWorksheetClick = (worksheetId: string) => {
     navigate(`/worksheet/${worksheetId}`);

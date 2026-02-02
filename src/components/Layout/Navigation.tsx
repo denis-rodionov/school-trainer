@@ -2,11 +2,13 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Tabs, Tab } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const Navigation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { userData } = useAuth();
+  const { t } = useLanguage();
 
   if (!userData) {
     return null;
@@ -29,8 +31,8 @@ const Navigation: React.FC = () => {
         }}
         sx={{ mb: 3 }}
       >
-        <Tab label="Topics" />
-        <Tab label="Students" />
+        <Tab label={t('nav.topics')} />
+        <Tab label={t('nav.students')} />
       </Tabs>
     );
   }

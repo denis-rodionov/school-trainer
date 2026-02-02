@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Typography, TextField, Paper } from '@mui/material';
 import { Exercise } from '../../types';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ExerciseBlockProps {
   exercise: Exercise;
@@ -20,6 +21,7 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   isReadOnly = false,
   showCorrectAnswers = false,
 }) => {
+  const { t } = useLanguage();
   // Extract correct answers from markdown
   const correctAnswers = extractCorrectAnswers(exercise.markdown);
   const parsed = parseMarkdown(exercise.markdown);
@@ -58,9 +60,9 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 }}
                 helperText={
                   showCorrectAnswers && correctAnswer
-                    ? `Correct: ${correctAnswer}`
+                    ? `${t('exercise.correct')} ${correctAnswer}`
                     : hasError
-                    ? 'Incorrect'
+                    ? t('exercise.incorrect')
                     : ''
                 }
               />
@@ -84,7 +86,7 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
       </Box>
       {exercise.userInput && (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          User input: {exercise.userInput}
+          {t('exercise.userInput')} {exercise.userInput}
         </Typography>
       )}
     </Paper>

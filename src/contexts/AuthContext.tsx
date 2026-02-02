@@ -8,12 +8,14 @@ interface AuthContextType {
   currentUser: FirebaseUser | null;
   userData: User | null;
   loading: boolean;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userData: null,
   loading: true,
+  refreshUserData: async () => {},
 });
 
 export const useAuth = () => {
@@ -40,10 +42,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
+  const refreshUserData = async () => {
+    if (currentUser) {
+      const data = await getUserData(currentUser.uid);
+      setUserData(data);
+    }
+  };
+
   const value = {
     currentUser,
     userData,
     loading,
+    refreshUserData,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

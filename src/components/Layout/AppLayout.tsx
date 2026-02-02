@@ -7,13 +7,19 @@ import {
   Button,
   Box,
   Container,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { logout } from '../../services/auth';
+import { Language } from '../../types';
 import Navigation from './Navigation';
 
 const AppLayout: React.FC = () => {
   const { currentUser, userData } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -21,20 +27,47 @@ const AppLayout: React.FC = () => {
     navigate('/login');
   };
 
+  const handleLanguageChange = async (event: any) => {
+    const newLanguage = event.target.value as Language;
+    await setLanguage(newLanguage);
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static">
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            School Trainer
+            {t('app.title')}
           </Typography>
           {currentUser && userData && (
             <>
+              <FormControl size="small" sx={{ minWidth: 100, mr: 2 }}>
+                <Select
+                  value={language}
+                  onChange={handleLanguageChange}
+                  sx={{
+                    color: 'inherit',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.23)',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                    '& .MuiSvgIcon-root': {
+                      color: 'inherit',
+                    },
+                  }}
+                >
+                  <MenuItem value="en">English</MenuItem>
+                  <MenuItem value="ru">Русский</MenuItem>
+                  <MenuItem value="de">Deutsch</MenuItem>
+                </Select>
+              </FormControl>
               <Typography variant="body2" sx={{ mr: 2 }}>
                 {userData.displayName || userData.email} ({userData.role})
               </Typography>
               <Button color="inherit" onClick={handleLogout}>
-                Logout
+                {t('app.logout')}
               </Button>
             </>
           )}

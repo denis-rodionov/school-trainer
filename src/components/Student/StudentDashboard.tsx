@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, CircularProgress, Alert, Tabs, Tab } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { translateSubject } from '../../i18n/translations';
 import { getSubjectData, getUserSubjects } from '../../services/users';
 import { getRecentWorksheets } from '../../services/worksheets';
 import { Subject, SubjectData, Worksheet } from '../../types';
@@ -13,6 +15,7 @@ import {
 
 const StudentDashboard: React.FC = () => {
   const { currentUser, userData } = useAuth();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectsData, setSubjectsData] = useState<Map<Subject, SubjectData>>(new Map());
@@ -64,7 +67,7 @@ const StudentDashboard: React.FC = () => {
         setSubjectsData(dataMap);
         setWorksheets(worksheetsMap);
       } catch (err: any) {
-        setError(err.message || 'Failed to load dashboard data');
+        setError(err.message || t('error.failedToLoad'));
       } finally {
         setLoading(false);
       }
@@ -88,15 +91,15 @@ const StudentDashboard: React.FC = () => {
       // Get subject data with topic assignments
       const subjectData = await getSubjectData(currentUser.uid, subject);
       if (!subjectData || !subjectData.topicAssignments.length) {
-        alert('No topics assigned for this subject. Please contact your trainer.');
+        alert(t('error.noAssignments'));
         return;
       }
 
       // Exercises need to be created manually
-      alert('Worksheet creation is not yet implemented. Exercises need to be created manually.');
+      alert(t('error.failedToCreateWorksheet'));
       return;
     } catch (err: any) {
-      alert(err.message || 'Failed to create worksheet');
+      alert(err.message || t('error.failedToCreateWorksheet'));
     }
   };
 
@@ -116,10 +119,10 @@ const StudentDashboard: React.FC = () => {
     return (
       <Box>
         <Typography variant="h4" gutterBottom>
-          Student Dashboard
+          {t('dashboard.studentDashboard')}
         </Typography>
         <Alert severity="info">
-          No subjects assigned yet. Please contact your trainer to get started.
+          {t('dashboard.noSubjectsAssigned')}
         </Alert>
       </Box>
     );
@@ -132,7 +135,7 @@ const StudentDashboard: React.FC = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Student Dashboard
+        {t('dashboard.studentDashboard')}
       </Typography>
 
       {subjects.length > 0 && (
@@ -140,7 +143,7 @@ const StudentDashboard: React.FC = () => {
           {subjects.map((subject, index) => (
             <Tab 
               key={subject} 
-              label={subject.charAt(0).toUpperCase() + subject.slice(1)} 
+              label={translateSubject(subject, language)} 
             />
           ))}
         </Tabs>
@@ -159,7 +162,7 @@ const StudentDashboard: React.FC = () => {
           {/* Recent Worksheets Component */}
           <RecentWorksheets 
             worksheets={currentWorksheets} 
-            subjectName={currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)} 
+            subjectName={translateSubject(currentSubject, language)} 
           />
         </Box>
       )}

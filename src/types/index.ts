@@ -6,11 +6,14 @@ export type Subject = string; // Dynamic - can be any subject name
 
 export type WorksheetStatus = 'pending' | 'completed';
 
+export type Language = 'en' | 'ru' | 'de';
+
 export interface User {
   uid: string;
   email: string;
   role: UserRole;
   displayName?: string;
+  language?: Language;
   createdAt: Timestamp;
 }
 
