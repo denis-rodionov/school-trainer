@@ -585,3 +585,37 @@ export const translateSubject = (subject: string, language: Language = 'en'): st
     return subject || '';
   }
 };
+
+/**
+ * Reverse translates a subject name back to its constant value.
+ * If the input is a translated name in any language, returns the constant.
+ * If the input is already a constant, returns it normalized.
+ */
+export const getSubjectConstant = (input: string): string => {
+  try {
+    if (!input) return '';
+    const normalizedInput = input.toLowerCase().trim();
+    
+    // First, check if it's already a constant subject name
+    const allConstants = Object.keys(subjectTranslations.en);
+    const matchingConstant = allConstants.find(constant => constant.toLowerCase() === normalizedInput);
+    if (matchingConstant) {
+      return matchingConstant;
+    }
+    
+    // Then, check if it matches any translated name in any language
+    for (const lang of ['en', 'ru', 'de'] as Language[]) {
+      for (const [constant, translated] of Object.entries(subjectTranslations[lang])) {
+        if (translated.toLowerCase() === normalizedInput) {
+          return constant;
+        }
+      }
+    }
+    
+    // If not found, return the input as-is (normalized)
+    return normalizedInput;
+  } catch (error) {
+    console.error('Error getting subject constant:', error, input);
+    return input.toLowerCase().trim();
+  }
+};

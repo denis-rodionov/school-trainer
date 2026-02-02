@@ -24,7 +24,7 @@ import { Topic, Subject } from '../../types';
 import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { translateSubject } from '../../i18n/translations';
+import { translateSubject, getSubjectConstant } from '../../i18n/translations';
 import { generateExercise } from '../../services/ai';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 import { translateToGerman } from '../../services/translation';
@@ -40,6 +40,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
   const { currentUser } = useAuth();
   const { t, language } = useLanguage();
   const [subject, setSubject] = useState<Subject>('');
+  const [subjectInputValue, setSubjectInputValue] = useState<string>('');
   const [shortName, setShortName] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -76,12 +77,14 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
 
     if (topic) {
       setSubject(topic.subject);
+      setSubjectInputValue(translateSubject(topic.subject, language));
       setShortName(topic.shortName);
       setTaskDescription(topic.taskDescription);
       setPrompt(topic.prompt);
       setDefaultExerciseCount(topic.defaultExerciseCount ?? 3);
     } else {
       setSubject('');
+      setSubjectInputValue('');
       setShortName('');
       setTaskDescription('');
       setPrompt('');
@@ -93,7 +96,14 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     setTestError(null);
     setTranslatedField(null);
     setOriginalValues({ shortName: '', taskDescription: '', prompt: '' });
-  }, [topic, open]);
+  }, [topic, open, language]);
+  
+  // Update input value when language changes but subject stays the same
+  useEffect(() => {
+    if (subject) {
+      setSubjectInputValue(translateSubject(subject, language));
+    }
+  }, [language]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -243,7 +253,28 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                 freeSolo
                 options={availableSubjects}
                 value={subject}
-                onInputChange={(_, newValue) => setSubject(newValue)}
+                inputValue={subjectInputValue}
+                onInputChange={(_, newValue) => {
+                  // Update the display value
+                  setSubjectInputValue(newValue);
+                  // Convert typed input back to constant and update stored value
+                  if (newValue) {
+                    const constantValue = getSubjectConstant(newValue);
+                    setSubject(constantValue);
+                  } else {
+                    setSubject('');
+                  }
+                }}
+                onChange={(_, newValue) => {
+                  // When an option is selected, newValue is the constant from availableSubjects
+                  if (newValue) {
+                    setSubject(newValue);
+                    setSubjectInputValue(translateSubject(newValue, language));
+                  } else {
+                    setSubject('');
+                    setSubjectInputValue('');
+                  }
+                }}
                 getOptionLabel={(option) => {
                   // Display translated subject name in dropdown, but store constant value
                   return translateSubject(option, language);
