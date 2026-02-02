@@ -30,19 +30,31 @@ const ProtectedRoute: React.FC<{
   allowedRoles?: ('student' | 'trainer')[];
 }> = ({ children, allowedRoles }) => {
   const { currentUser, userData, loading } = useAuth();
+  
+  console.log('ProtectedRoute check', { 
+    loading, 
+    hasCurrentUser: !!currentUser, 
+    hasUserData: !!userData, 
+    role: userData?.role, 
+    allowedRoles 
+  });
 
   if (loading) {
+    console.log('ProtectedRoute: Still loading');
     return <div>Loading...</div>;
   }
 
   if (!currentUser || !userData) {
+    console.log('ProtectedRoute: No user, redirecting to login');
     return <Navigate to="/login" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(userData.role)) {
+    console.log('ProtectedRoute: Role not allowed, redirecting');
     return <Navigate to="/" replace />;
   }
 
+  console.log('ProtectedRoute: Allowing access');
   return <>{children}</>;
 };
 

@@ -571,8 +571,14 @@ export const subjectTranslations: Record<Language, Record<string, string>> = {
 };
 
 export const translateSubject = (subject: string, language: Language = 'en'): string => {
-  const normalizedSubject = subject.toLowerCase().trim();
-  return subjectTranslations[language]?.[normalizedSubject] || 
-         subjectTranslations.en[normalizedSubject] || 
-         subject.charAt(0).toUpperCase() + subject.slice(1); // Fallback to capitalized original
+  try {
+    if (!subject) return '';
+    const normalizedSubject = subject.toLowerCase().trim();
+    return subjectTranslations[language]?.[normalizedSubject] || 
+           subjectTranslations.en[normalizedSubject] || 
+           (subject.charAt(0) ? subject.charAt(0).toUpperCase() + subject.slice(1) : subject); // Fallback to capitalized original
+  } catch (error) {
+    console.error('Error translating subject:', error, subject);
+    return subject || '';
+  }
 };

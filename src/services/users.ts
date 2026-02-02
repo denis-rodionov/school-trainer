@@ -32,11 +32,24 @@ export const getUser = async (uid: string): Promise<User | null> => {
 };
 
 export const getSubjectData = async (uid: string, subject: Subject): Promise<SubjectData | null> => {
-  const subjectDoc = await getDoc(doc(db, 'users', uid, 'subjects', subject));
-  if (!subjectDoc.exists()) {
+  try {
+    const subjectDoc = await getDoc(doc(db, 'users', uid, 'subjects', subject));
+    if (!subjectDoc.exists()) {
+      return null;
+    }
+    const data = subjectDoc.data();
+    // Ensure all required fields exist with defaults
+    return {
+      subject: data.subject || subject,
+      topicAssignments: Array.isArray(data.topicAssignments) ? data.topicAssignments : [],
+      statistics: data.statistics || {
+        worksheetsLast7Days: 0,
+      },
+    } as SubjectData;
+  } catch (error) {
+    console.error(`Error loading subject data for ${subject}:`, error);
     return null;
   }
-  return { ...subjectDoc.data() } as SubjectData;
 };
 
 export const setSubjectData = async (

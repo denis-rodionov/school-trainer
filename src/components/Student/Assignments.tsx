@@ -62,7 +62,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
 
   useEffect(() => {
     const loadTopics = async () => {
-      if (!subjectData || !subjectData.topicAssignments.length) {
+      if (!subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
         setLoading(false);
         return;
       }
@@ -92,7 +92,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
   }, [subjectData]);
 
   const handlePractice = async () => {
-    if (!currentUser || !subjectData || !subjectData.topicAssignments.length) {
+    if (!currentUser || !subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
       return;
     }
 
@@ -206,7 +206,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
     );
   }
 
-  if (!subjectData || !subjectData.topicAssignments.length) {
+  if (!subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
     return (
       <Card
         elevation={3}

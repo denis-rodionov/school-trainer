@@ -39,7 +39,7 @@ const AppLayout: React.FC = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {t('app.title')}
           </Typography>
-          {currentUser && userData && (
+          {currentUser && (
             <>
               <FormControl size="small" sx={{ minWidth: 100, mr: 2 }}>
                 <Select
@@ -63,9 +63,11 @@ const AppLayout: React.FC = () => {
                   <MenuItem value="de">Deutsch</MenuItem>
                 </Select>
               </FormControl>
-              <Typography variant="body2" sx={{ mr: 2 }}>
-                {userData.displayName || userData.email} ({userData.role})
-              </Typography>
+              {userData && (
+                <Typography variant="body2" sx={{ mr: 2 }}>
+                  {userData.displayName || userData.email} ({userData.role})
+                </Typography>
+              )}
               <Button color="inherit" onClick={handleLogout}>
                 {t('app.logout')}
               </Button>

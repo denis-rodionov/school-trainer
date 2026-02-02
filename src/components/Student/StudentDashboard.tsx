@@ -13,8 +13,13 @@ import {
   getPendingWorksheetBySubject,
 } from '../../services/worksheets';
 
+// Module-level log to verify file is loaded
+console.log('StudentDashboard module loaded');
+
 const StudentDashboard: React.FC = () => {
-  const { currentUser, userData } = useAuth();
+  console.log('=== StudentDashboard component START ===');
+  
+  const { currentUser, userData, loading: authLoading } = useAuth();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -23,12 +28,37 @@ const StudentDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
+  
+  console.log('StudentDashboard render', { 
+    hasCurrentUser: !!currentUser, 
+    hasUserData: !!userData, 
+    authLoading, 
+    role: userData?.role,
+    language 
+  });
 
   useEffect(() => {
-    if (!currentUser || !userData || userData.role !== 'student') {
+    console.log('StudentDashboard useEffect triggered', { currentUser: !!currentUser, userData: !!userData, role: userData?.role });
+    
+    if (!currentUser) {
+      console.log('No currentUser, setting loading to false');
+      setLoading(false);
+      return;
+    }
+    
+    if (!userData) {
+      console.log('No userData yet, waiting...');
+      // Wait for userData to load
+      return;
+    }
+    
+    if (userData.role !== 'student') {
+      console.log('Not a student, setting loading to false');
+      setLoading(false);
       return;
     }
 
+    console.log('Loading data for student...');
     const loadData = async () => {
       try {
         setLoading(true);
@@ -58,14 +88,23 @@ const StudentDashboard: React.FC = () => {
 
         userSubjects.forEach((subject, index) => {
           const data = subjectDataPromises[index];
+          console.log(`Subject ${subject}:`, data);
+          // Always set data, even if null (to track which subjects exist)
           if (data) {
             dataMap.set(subject, data);
           }
-          worksheetsMap.set(subject, worksheetsPromises[index]);
+          const worksheetsForSubject = worksheetsPromises[index] || [];
+          console.log(`Worksheets for ${subject}:`, worksheetsForSubject);
+          worksheetsMap.set(subject, worksheetsForSubject);
         });
 
+        console.log('Final dataMap:', Array.from(dataMap.entries()));
+        console.log('Final worksheetsMap:', Array.from(worksheetsMap.entries()));
         setSubjectsData(dataMap);
         setWorksheets(worksheetsMap);
+        
+        // Reset tab value if it's out of bounds
+        setTabValue((prev) => prev >= userSubjects.length ? 0 : prev);
       } catch (err: any) {
         setError(err.message || t('error.failedToLoad'));
       } finally {
@@ -103,7 +142,8 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
+    console.log('Showing loading spinner', { authLoading, loading });
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
@@ -128,9 +168,9 @@ const StudentDashboard: React.FC = () => {
     );
   }
 
-  const currentSubject = subjects[tabValue];
-  const currentSubjectData = subjectsData.get(currentSubject) || null;
-  const currentWorksheets = worksheets.get(currentSubject) || [];
+  const currentSubject = subjects.length > 0 && tabValue < subjects.length ? subjects[tabValue] : null;
+  const currentSubjectData = currentSubject ? (subjectsData.get(currentSubject) || null) : null;
+  const currentWorksheets = currentSubject ? (worksheets.get(currentSubject) || []) : [];
 
   return (
     <Box>
