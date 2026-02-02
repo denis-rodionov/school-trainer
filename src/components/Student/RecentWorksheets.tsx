@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { Worksheet } from '../../types';
 import { formatWorksheetDate } from '../../utils/dateUtils';
 import { Timestamp } from 'firebase/firestore';
+import { format } from 'date-fns';
 
 interface RecentWorksheetsProps {
   worksheets: Worksheet[];
@@ -63,6 +64,19 @@ const RecentWorksheets: React.FC<RecentWorksheetsProps> = ({
           <List sx={{ pt: 1 }}>
             {worksheets.map((worksheet) => {
               const isPending = worksheet.status === 'pending';
+              const dateToFormat = isPending ? worksheet.createdAt : worksheet.completedAt;
+              let formattedDate = 'Unknown date';
+              if (dateToFormat) {
+                let dateObj: Date;
+                if (dateToFormat.toDate) {
+                  dateObj = dateToFormat.toDate();
+                } else if (dateToFormat instanceof Date) {
+                  dateObj = dateToFormat;
+                } else {
+                  dateObj = new Date(dateToFormat as any);
+                }
+                formattedDate = format(dateObj, 'MMM dd, yyyy');
+              }
               const displayDate = isPending 
                 ? formatWorksheetDate(worksheet.createdAt)
                 : formatWorksheetDate(worksheet.completedAt);
@@ -85,7 +99,7 @@ const RecentWorksheets: React.FC<RecentWorksheetsProps> = ({
                   }}
                 >
                   <ListItemText
-                    primary={`Worksheet ${worksheet.id.slice(0, 8)}`}
+                    primary={formattedDate}
                     secondary={displayDate}
                   />
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

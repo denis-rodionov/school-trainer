@@ -87,7 +87,7 @@ Requirements:
 8. IMPORTANT: Generate a DIFFERENT exercise each time. Vary the content, structure, and values. Do not repeat the same exercise.
 
 Example formats:
-"Calculate: 5 + ____ (3) = 8"
+"5 + ____ (3) = 8"
 "4+2=____ (6)"
 "Fill in the blank: The capital of France is ____ (Paris)"
 "Complete: I ____ (am) a student."
