@@ -222,12 +222,19 @@ const WorksheetScreen: React.FC = () => {
           ? null 
           : transformMarkdownWithAnswers(exercise.markdown, lastIncorrectAttempt);
 
+        // Build updates object, only including userInput if it's not null
+        const updates: Partial<Exercise> = {
+          attempt,
+        };
+        
+        // Only include userInput if it has a value (not null or empty)
+        if (userInput !== null && userInput !== undefined && userInput.trim() !== '') {
+          updates.userInput = userInput;
+        }
+
         exerciseUpdates.push({
           exerciseId: exercise.id,
-          updates: {
-            attempt,
-            userInput: userInput || undefined,
-          },
+          updates,
         });
       });
 
