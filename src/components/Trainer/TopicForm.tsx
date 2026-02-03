@@ -25,6 +25,7 @@ import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject, getSubjectConstant } from '../../i18n/translations';
+import { AVAILABLE_SUBJECTS } from '../../constants/subjects';
 import { generateExercise } from '../../services/ai';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 import { translateToGerman } from '../../services/translation';
@@ -68,9 +69,13 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
   useEffect(() => {
     const loadSubjects = async () => {
       if (open) {
+        // Use predefined list of available subjects, but also include any subjects from existing topics
+        // (in case new subjects are added to translations but not yet to AVAILABLE_SUBJECTS)
         const allTopics = await getTopics();
-        const uniqueSubjects = Array.from(new Set(allTopics.map((t) => t.subject)));
-        setAvailableSubjects(uniqueSubjects);
+        const topicsSubjects = Array.from(new Set(allTopics.map((t) => t.subject)));
+        // Combine predefined subjects with subjects from existing topics
+        const allSubjects = Array.from(new Set([...AVAILABLE_SUBJECTS, ...topicsSubjects]));
+        setAvailableSubjects(allSubjects);
       }
     };
     loadSubjects();
