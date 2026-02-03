@@ -63,10 +63,13 @@ const Assignments: React.FC<AssignmentsProps> = ({
   useEffect(() => {
     const loadTopics = async () => {
       if (!subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
+        setTopics(new Map());
         setLoading(false);
         return;
       }
 
+      setLoading(true);
+      setTopics(new Map()); // Clear previous tab's topics so we don't show old names with new IDs
       try {
         const topicPromises = subjectData.topicAssignments.map((assignment) =>
           getTopic(assignment.topicId)
