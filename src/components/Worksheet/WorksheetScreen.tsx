@@ -61,6 +61,8 @@ const WorksheetScreen: React.FC = () => {
   const [regenerationProgress, setRegenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [shouldGoToDashboard, setShouldGoToDashboard] = useState(false);
   const [trainerMarkedErrors, setTrainerMarkedErrors] = useState<Set<string>>(new Set()); // Track which exercises trainer marked as errors (by exercise ID)
+  const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Track number of exercises with mistakes from first submit
+  const [exercisesWithMistakesIds, setExercisesWithMistakesIds] = useState<Set<string>>(new Set()); // Track which exercises had mistakes on first submit (for updating attempts/userInput)
 
   const isTrainer = userData?.role === 'trainer';
   const isCompleted = worksheet?.status === 'completed';
@@ -121,6 +123,9 @@ const WorksheetScreen: React.FC = () => {
         setAttempts(new Array(sortedExercises.length).fill(1));
         // Initialize previous answers (empty arrays for each exercise)
         setPreviousAnswers(new Array(sortedExercises.length).fill([]).map(() => []));
+        // Reset mistake count and exercises with mistakes when loading a new worksheet
+        setMistakeCount(null);
+        setExercisesWithMistakesIds(new Set());
         
         if (isCompleted) {
           // For completed worksheets, we'll show userInput text
@@ -143,7 +148,7 @@ const WorksheetScreen: React.FC = () => {
     const newAnswers = [...answers];
     newAnswers[index] = value;
     setAnswers(newAnswers);
-    // Clear error for this field
+    // Clear error for this field if it was previously marked as error
     if (errors[index]) {
       const newErrors = [...errors];
       newErrors[index] = false;
@@ -151,24 +156,29 @@ const WorksheetScreen: React.FC = () => {
     }
   };
 
-  const evaluateAnswers = (): { errors: boolean[]; allCorrect: boolean } => {
+  const handleSubmit = async () => {
+    if (isReadOnly) return;
+
+    if (!worksheet || !currentUser) return;
+
+    // Calculate errors and check correctness
     const newErrors: boolean[] = [];
+    const exercisesWithMistakesSet = new Set<string>();
     let globalIndex = 0;
     let allCorrect = true;
 
     exercises.forEach((exercise, exerciseIndex) => {
-      // Extract correct answers from markdown
       const correctAnswers = extractCorrectAnswers(exercise.markdown);
       let exerciseHasError = false;
       const exerciseAnswers: string[] = [];
 
-      correctAnswers.forEach((correctAnswer, answerIndex) => {
+      correctAnswers.forEach((correctAnswer) => {
         const userAnswer = answers[globalIndex]?.trim().toLowerCase();
         const correct = correctAnswer.trim().toLowerCase();
         const isError = userAnswer !== correct;
         newErrors[globalIndex] = isError;
-        exerciseAnswers.push(answers[globalIndex] || ''); // Store original (not lowercased)
-        
+        exerciseAnswers.push(answers[globalIndex] || '');
+
         if (isError) {
           exerciseHasError = true;
           allCorrect = false;
@@ -176,48 +186,78 @@ const WorksheetScreen: React.FC = () => {
         globalIndex++;
       });
 
-      // If exercise has errors, save current answers as previous attempt and increment attempt
       if (exerciseHasError) {
-        const newPreviousAnswers = [...previousAnswers];
-        newPreviousAnswers[exerciseIndex] = [...exerciseAnswers]; // Save current incorrect attempt
-        setPreviousAnswers(newPreviousAnswers);
-        
-        const newAttempts = [...attempts];
-        newAttempts[exerciseIndex] = (newAttempts[exerciseIndex] || 1) + 1;
-        setAttempts(newAttempts);
+        exercisesWithMistakesSet.add(exercise.id);
       }
     });
 
-    return { errors: newErrors, allCorrect };
-  };
-
-  const handleSubmit = async () => {
-    if (isReadOnly) return;
-
-    const { errors: newErrors, allCorrect } = evaluateAnswers();
     setErrors(newErrors);
     setSubmitted(true);
 
-    if (!allCorrect) {
-      return; // Don't submit if there are errors - user can correct and resubmit
+    // If mistakeCount is not set yet, this is the first submit
+    // Calculate and store the mistake count and which exercises had mistakes, then return (don't submit yet)
+    if (mistakeCount === null) {
+      const calculatedMistakeCount = exercisesWithMistakesSet.size;
+      setMistakeCount(calculatedMistakeCount);
+      setExercisesWithMistakesIds(new Set(exercisesWithMistakesSet)); // Store which exercises had mistakes
+      
+      // Update attempts and previous answers for exercises with mistakes
+      exercises.forEach((exercise, exerciseIndex) => {
+        if (exercisesWithMistakesSet.has(exercise.id)) {
+          const correctAnswers = extractCorrectAnswers(exercise.markdown);
+          const exerciseAnswers: string[] = [];
+          
+          // Find the start index for this exercise's answers
+          let globalStartIndex = 0;
+          for (let i = 0; i < exerciseIndex; i++) {
+            const exCorrectAnswers = extractCorrectAnswers(exercises[i].markdown);
+            globalStartIndex += exCorrectAnswers.length;
+          }
+          
+          correctAnswers.forEach((_, answerIndex) => {
+            exerciseAnswers.push(answers[globalStartIndex + answerIndex] || '');
+          });
+
+          const newPreviousAnswers = [...previousAnswers];
+          newPreviousAnswers[exerciseIndex] = exerciseAnswers;
+          setPreviousAnswers(newPreviousAnswers);
+
+          const newAttempts = [...attempts];
+          newAttempts[exerciseIndex] = (newAttempts[exerciseIndex] || 1) + 1;
+          setAttempts(newAttempts);
+        }
+      });
+
+      // Don't submit if there are errors - user can correct and resubmit
+      return;
     }
 
-    if (!worksheet || !currentUser) return;
+    // If mistakeCount is set and all answers are correct, proceed with submission
+    if (!allCorrect) {
+      return; // Still have errors, wait for user to fix them
+    }
 
     try {
       setSaving(true);
 
-      // Calculate score
-      const totalAnswers = answers.length;
-      const correctAnswers = totalAnswers - newErrors.filter((e) => e).length;
-      const score = (correctAnswers / totalAnswers) * 100;
+      // Calculate score using the same method as trainer: (totalExercises - errors) / totalExercises * 100
+      // Use the mistakeCount from the first submit (doesn't change after that)
+      const totalExercises = exercises.length;
+      const errorCount = mistakeCount;
+      const correctCount = totalExercises - errorCount;
+      const score = totalExercises > 0 ? (correctCount / totalExercises) * 100 : 100;
 
       // Update exercises with attempt and userInput
-      let globalAnswerIndex = 0;
+      // Use the exercisesWithMistakesIds from the first submit (doesn't change)
       const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
 
       exercises.forEach((exercise, exerciseIndex) => {
-        const attempt = attempts[exerciseIndex] || 1;
+        // Check if this exercise had mistakes on first submit
+        const hasError = exercisesWithMistakesIds.has(exercise.id);
+        
+        // Determine attempt: 1 if no errors ever, 2+ if there were errors
+        const attempt = hasError ? (attempts[exerciseIndex] || 2) : 1;
+        
         // userInput: null if attempt === 1 (got it right first try)
         // userInput: last incorrect attempt if attempt > 1 (stored in previousAnswers)
         const lastIncorrectAttempt = previousAnswers[exerciseIndex] || [];
@@ -281,6 +321,7 @@ const WorksheetScreen: React.FC = () => {
       setSubmitted(false);
     } catch (err: any) {
       alert(err.message || t('error.failedToSubmitWorksheet'));
+      setSubmitted(false); // Reset submitted state on error so button can be clicked again
     } finally {
       setSaving(false);
     }
@@ -688,10 +729,10 @@ const WorksheetScreen: React.FC = () => {
             variant="contained"
             color="primary"
             onClick={handleSubmit}
-            disabled={saving || answers.some((a) => !a.trim())}
+            disabled={saving || answers.length === 0 || answers.some((a) => !a.trim())}
             size="large"
           >
-            {saving ? t('worksheet.submit') + '...' : submitted ? t('worksheet.submit') : t('worksheet.submit')}
+            {saving ? t('worksheet.submit') + '...' : t('worksheet.submit')}
           </Button>
         </Box>
       )}

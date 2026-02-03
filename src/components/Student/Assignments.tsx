@@ -405,34 +405,36 @@ const Assignments: React.FC<AssignmentsProps> = ({
 
         {onPractice && (
           <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handlePractice}
-              disabled={generatingWorksheet}
-              sx={{
-                py: 1.5,
-                px: 4,
-                fontSize: '1rem',
-                fontWeight: 600,
-                borderRadius: 2,
-              }}
-              startIcon={generatingWorksheet ? <CircularProgress size={20} color="inherit" /> : null}
-            >
-              {generatingWorksheet ? t('assignments.generating') : t('assignments.practice')}
-            </Button>
-            {generationProgress && (
-              <Box sx={{ mt: 2 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={(generationProgress.current / generationProgress.total) * 100}
-                  sx={{ height: 8, borderRadius: 1 }}
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
-                  {generationProgress.current} {t('worksheet.of')} {generationProgress.total} {t('worksheet.exercises')}
-                </Typography>
-              </Box>
-            )}
+            <Box sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handlePractice}
+                disabled={generatingWorksheet}
+                sx={{
+                  py: 1.5,
+                  px: 4,
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  borderRadius: 2,
+                }}
+                startIcon={generatingWorksheet ? <CircularProgress size={20} color="inherit" /> : null}
+              >
+                {generatingWorksheet ? t('assignments.generating') : t('assignments.practice')}
+              </Button>
+              {generationProgress && (
+                <Box sx={{ mt: 2, width: '100%' }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(generationProgress.current / generationProgress.total) * 100}
+                    sx={{ height: 8, borderRadius: 1 }}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
+                    {generationProgress.current} {t('worksheet.of')} {generationProgress.total} {t('worksheet.exercises')}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
           </Box>
         )}
       </CardContent>
