@@ -207,6 +207,7 @@ const StudentDetail: React.FC = () => {
                 isReadOnly={false}
                 studentId={studentId}
                 onUpdate={handleAssignSave}
+                userIdForWorksheet={studentId ?? undefined}
               />
 
               {/* Recent Worksheets Component */}

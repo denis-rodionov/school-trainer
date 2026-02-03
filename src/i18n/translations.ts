@@ -148,6 +148,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'assignments.noDescription': 'No description',
     'assignments.exercises': 'Exercises',
     'assignments.practice': 'Practice',
+    'assignments.generate': 'Generate',
     'assignments.generating': 'Generating...',
     'assignments.exercisesOf': 'exercises',
     
@@ -337,6 +338,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'assignments.noDescription': 'Нет описания',
     'assignments.exercises': 'Упражнения',
     'assignments.practice': 'Практика',
+    'assignments.generate': 'Создать',
     'assignments.generating': 'Создание...',
     'assignments.exercisesOf': 'упражнений',
     
@@ -526,6 +528,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'assignments.noDescription': 'Keine Beschreibung',
     'assignments.exercises': 'Übungen',
     'assignments.practice': 'Üben',
+    'assignments.generate': 'Erstellen',
     'assignments.generating': 'Wird erstellt...',
     'assignments.exercisesOf': 'Übungen',
     

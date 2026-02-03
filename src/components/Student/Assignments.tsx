@@ -38,6 +38,8 @@ interface AssignmentsProps {
   isReadOnly?: boolean;
   studentId?: string; // Required when isReadOnly is false (trainer editing)
   onUpdate?: () => void; // Callback to refresh parent data after update
+  /** When set (trainer view), worksheet is generated for this user and button label is "Generate" */
+  userIdForWorksheet?: string;
 }
 
 const Assignments: React.FC<AssignmentsProps> = ({ 
@@ -47,8 +49,11 @@ const Assignments: React.FC<AssignmentsProps> = ({
   isReadOnly = false,
   studentId: propStudentId,
   onUpdate,
+  userIdForWorksheet,
 }) => {
   const { currentUser } = useAuth();
+  const targetUserId = userIdForWorksheet ?? currentUser?.uid;
+  const isGenerateMode = Boolean(userIdForWorksheet);
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [topics, setTopics] = useState<Map<string, Topic>>(new Map());
@@ -95,15 +100,15 @@ const Assignments: React.FC<AssignmentsProps> = ({
   }, [subjectData]);
 
   const handlePractice = async () => {
-    if (!currentUser || !subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
+    if (!targetUserId || !subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
       return;
     }
 
     try {
       setGeneratingWorksheet(true);
 
-      // Check for pending worksheet
-      const pendingWorksheet = await getPendingWorksheetBySubject(currentUser.uid, subject);
+      // Check for pending worksheet (for target user: student or self)
+      const pendingWorksheet = await getPendingWorksheetBySubject(targetUserId, subject);
       
       if (pendingWorksheet) {
         navigate(`/worksheet/${pendingWorksheet.id}`);
@@ -167,8 +172,8 @@ const Assignments: React.FC<AssignmentsProps> = ({
         return;
       }
 
-      // Create worksheet
-      const worksheetId = await createWorksheet(currentUser.uid, subject, exercises);
+      // Create worksheet for target user (student when trainer generates, else current user)
+      const worksheetId = await createWorksheet(targetUserId, subject, exercises);
       
       // Reset progress
       setGenerationProgress(null);
@@ -403,7 +408,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
           })}
         </List>
 
-        {onPractice && (
+        {(onPractice || userIdForWorksheet) && (
           <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start' }}>
               <Button
@@ -420,7 +425,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 }}
                 startIcon={generatingWorksheet ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                {generatingWorksheet ? t('assignments.generating') : t('assignments.practice')}
+                {generatingWorksheet ? t('assignments.generating') : (isGenerateMode ? t('assignments.generate') : t('assignments.practice'))}
               </Button>
               {generationProgress && (
                 <Box sx={{ mt: 2, width: '100%' }}>
