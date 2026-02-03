@@ -8,7 +8,7 @@ import { getRecentWorksheets } from '../../services/worksheets';
 import { Subject, SubjectData, Worksheet } from '../../types';
 import Assignments from './Assignments';
 import RecentWorksheets from './RecentWorksheets';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getPendingWorksheetBySubject,
 } from '../../services/worksheets';
@@ -22,12 +22,33 @@ const StudentDashboard: React.FC = () => {
   const { currentUser, userData, loading: authLoading } = useAuth();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectsData, setSubjectsData] = useState<Map<Subject, SubjectData>>(new Map());
   const [worksheets, setWorksheets] = useState<Map<Subject, Worksheet[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
+
+  // Sync tab with URL subject param (so back from worksheet restores the tab)
+  useEffect(() => {
+    if (subjects.length === 0) return;
+    const subjectFromUrl = searchParams.get('subject');
+    const index = subjectFromUrl ? subjects.indexOf(subjectFromUrl) : -1;
+    if (index >= 0) {
+      setTabValue(index);
+    } else {
+      setSearchParams({ subject: subjects[0] }, { replace: true });
+      if (subjectFromUrl) setTabValue(0);
+    }
+  }, [subjects, searchParams]);
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
+    if (newValue >= 0 && newValue < subjects.length) {
+      setTabValue(newValue);
+      setSearchParams({ subject: subjects[newValue] }, { replace: true });
+    }
+  };
   
   console.log('StudentDashboard render', { 
     hasCurrentUser: !!currentUser, 
@@ -179,7 +200,7 @@ const StudentDashboard: React.FC = () => {
       </Typography>
 
       {subjects.length > 0 && (
-        <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 3 }}>
+        <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
           {subjects.map((subject, index) => (
             <Tab 
               key={subject} 

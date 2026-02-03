@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -23,6 +23,7 @@ import { translateSubject } from '../../i18n/translations';
 const StudentDetail: React.FC = () => {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, language } = useLanguage();
   const [student, setStudent] = useState<User | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -32,6 +33,26 @@ const StudentDetail: React.FC = () => {
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+
+  // Sync tab with URL subject param (so back from worksheet restores the tab)
+  useEffect(() => {
+    if (subjects.length === 0) return;
+    const subjectFromUrl = searchParams.get('subject');
+    const index = subjectFromUrl ? subjects.indexOf(subjectFromUrl) : -1;
+    if (index >= 0) {
+      setTabValue(index);
+    } else {
+      setSearchParams({ subject: subjects[0] }, { replace: true });
+      if (subjectFromUrl) setTabValue(0);
+    }
+  }, [subjects, searchParams]);
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
+    if (studentId && newValue >= 0 && newValue < subjects.length) {
+      setTabValue(newValue);
+      setSearchParams({ subject: subjects[newValue] }, { replace: true });
+    }
+  };
 
   useEffect(() => {
     if (!studentId) return;
@@ -168,7 +189,7 @@ const StudentDetail: React.FC = () => {
 
       {subjects.length > 0 ? (
         <>
-          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 3 }}>
+          <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
             {subjects.map((subject, index) => (
               <Tab 
                 key={subject} 
