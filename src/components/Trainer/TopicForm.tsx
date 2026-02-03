@@ -20,14 +20,16 @@ import {
   Grid,
 } from '@mui/material';
 import { Science, Refresh, Translate } from '@mui/icons-material';
-import { Topic, Subject } from '../../types';
+import { Topic, Subject, TopicType } from '../../types';
 import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject, getSubjectConstant } from '../../i18n/translations';
 import { AVAILABLE_SUBJECTS } from '../../constants/subjects';
 import { generateExercise } from '../../services/ai';
+import { generateDictationText } from '../../services/aiDictation';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
+import { extractDictationAnswer, extractAudioUrl } from '../../utils/dictationParser';
 import { translateToGerman } from '../../services/translation';
 
 interface TopicFormProps {
@@ -42,6 +44,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
   const { t, language } = useLanguage();
   const [subject, setSubject] = useState<Subject>('');
   const [subjectInputValue, setSubjectInputValue] = useState<string>('');
+  const [topicType, setTopicType] = useState<TopicType>('FILL_GAPS');
   const [shortName, setShortName] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -83,6 +86,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     if (topic) {
       setSubject(topic.subject);
       setSubjectInputValue(translateSubject(topic.subject, language));
+      setTopicType(topic.type || 'FILL_GAPS');
       setShortName(topic.shortName);
       setTaskDescription(topic.taskDescription);
       setPrompt(topic.prompt);
@@ -90,6 +94,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     } else {
       setSubject('');
       setSubjectInputValue('');
+      setTopicType('FILL_GAPS');
       setShortName('');
       setTaskDescription('');
       setPrompt('');
@@ -193,20 +198,49 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       setTestingExercise(true);
       setTestError(null);
       
-      const result = await generateExercise({
-        prompt: prompt.trim(),
-        topicName: shortName.trim() || t('topics.testExercise'),
-        exerciseNumber: defaultExerciseCount || 1,
-      });
+      let resultMarkdown: string;
+      let displayText: string;
 
-      setTestExerciseMarkdown(result.markdown);
-      
-      // Extract the original text from markdown for display
-      // Remove HTML tags and show the raw exercise
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = result.markdown;
-      const textContent = tempDiv.textContent || tempDiv.innerText || '';
-      setTestExercise(textContent);
+      if (topicType === 'DICTATION') {
+        // For dictation, generate plain text (no gaps)
+        const dictationText = await generateDictationText({
+          prompt: prompt.trim(),
+          topicName: shortName.trim() || t('topics.testExercise'),
+          exerciseNumber: 1,
+        });
+
+        // Create test markdown structure (without actual audio for testing)
+        // Escape HTML special characters
+        const escapedText = dictationText
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+
+        resultMarkdown = `<div class="dictation-exercise">
+  <audio controls src="[Audio will be generated when creating worksheet]"></audio>
+  <textarea data-answer="${escapedText}" rows="5" cols="50" placeholder="Write what you hear..."></textarea>
+</div>`;
+        displayText = dictationText;
+      } else {
+        // For FILL_GAPS, use existing generation
+        const result = await generateExercise({
+          prompt: prompt.trim(),
+          topicName: shortName.trim() || t('topics.testExercise'),
+          exerciseNumber: defaultExerciseCount || 1,
+        });
+
+        resultMarkdown = result.markdown;
+        
+        // Extract the original text from markdown for display
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = result.markdown;
+        displayText = tempDiv.textContent || tempDiv.innerText || '';
+      }
+
+      setTestExerciseMarkdown(resultMarkdown);
+      setTestExercise(displayText);
     } catch (err: any) {
       setTestError(err.message || t('error.failedToGenerateTest'));
       setTestExercise(null);
@@ -225,6 +259,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       if (topic) {
         await updateTopic(topic.id, {
           subject,
+          type: topicType,
           shortName: shortName.trim(),
           taskDescription: taskDescription.trim(),
           prompt: prompt.trim(),
@@ -233,6 +268,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       } else {
         await createTopic({
           subject,
+          type: topicType,
           shortName: shortName.trim(),
           taskDescription: taskDescription.trim(),
           prompt: prompt.trim(),
@@ -295,6 +331,21 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                   />
                 )}
               />
+            </Grid>
+            <Grid item xs={12} sm={2}></Grid>
+
+            <Grid item xs={12} sm={10}>
+              <FormControl fullWidth>
+                <InputLabel>{t('topics.type')}</InputLabel>
+                <Select
+                  value={topicType}
+                  label={t('topics.type')}
+                  onChange={(e) => setTopicType(e.target.value as TopicType)}
+                >
+                  <MenuItem value="FILL_GAPS">{t('topics.typeFillGaps')}</MenuItem>
+                  <MenuItem value="DICTATION">{t('topics.typeDictation')}</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={2}></Grid>
 
@@ -424,7 +475,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                   {t('topics.testExercisePreview')}
                 </Typography>
                 <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                  <TestExercisePreview markdown={testExerciseMarkdown} />
+                  <TestExercisePreview markdown={testExerciseMarkdown} topicType={topicType} />
                 </Paper>
               </Box>
             )}
@@ -442,7 +493,62 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
 };
 
 // Component to preview test exercise
-const TestExercisePreview: React.FC<{ markdown: string }> = ({ markdown }) => {
+const TestExercisePreview: React.FC<{ markdown: string; topicType: TopicType }> = ({ markdown, topicType }) => {
+  // Check if this is a dictation exercise
+  const isDictation = topicType === 'DICTATION' || markdown.includes('<audio') || markdown.includes('<textarea');
+
+  if (isDictation) {
+    // For dictation, extract the correct answer and show audio + textarea preview
+    const correctAnswer = extractDictationAnswer(markdown);
+    const audioUrl = extractAudioUrl(markdown);
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {audioUrl && audioUrl !== '[Audio will be generated when creating worksheet]' ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              🔊 Audio Player:
+            </Typography>
+            <audio controls src={audioUrl} style={{ maxWidth: '300px' }} />
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              🔊 Audio Player: (will be generated when creating worksheet)
+            </Typography>
+          </Box>
+        )}
+        
+        <TextField
+          multiline
+          rows={5}
+          value=""
+          disabled
+          placeholder="Write what you hear..."
+          fullWidth
+          sx={{
+            '& .MuiInputBase-input': {
+              backgroundColor: '#fff',
+              fontSize: '16px',
+            },
+          }}
+        />
+        
+        {correctAnswer && (
+          <Box sx={{ mt: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Correct Answer:
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontStyle: 'italic', color: 'text.secondary' }}>
+              {correctAnswer}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    );
+  }
+
+  // For FILL_GAPS exercises, use the existing logic
   const parsed = parseMarkdown(markdown);
   const correctAnswers = extractCorrectAnswers(markdown);
   let answerIndex = 0;

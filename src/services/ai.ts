@@ -174,7 +174,7 @@ ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COM
           }]
         }],
         generationConfig: {
-          maxOutputTokens: 1000, // Increased to prevent truncation of longer exercises
+          maxOutputTokens: 2000, // Increased to prevent truncation of longer exercises
           temperature: 1.4, // Maximum temperature (1.4) for maximum variation and creativity
           topP: 0.9, // Lower topP (0.9 instead of 0.95) to consider more diverse token options
           topK: 20, // Lower topK (20 instead of 40) to force more exploration of less likely tokens
@@ -313,15 +313,29 @@ ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COM
 
     // Check if response appears truncated (ends with incomplete answer)
     const trimmedText = generatedText.trim();
-    if (finishReason === 'MAX_TOKENS' || trimmedText.endsWith('____ (') || trimmedText.match(/____\s*\([^)]*$/)) {
+    
+    // Only throw error if we actually detect an incomplete gap pattern at the end
+    // Don't rely solely on finishReason as it can be 'MAX_TOKENS' even for complete responses
+    // Check if text ends with incomplete gap pattern: "____ (" or "____ (something" without closing parenthesis
+    const hasIncompleteGap = trimmedText.endsWith('____ (') || 
+                              trimmedText.match(/____\s*\([^)]*$/); // Gap with opening paren but no closing paren at end
+    
+    // Only throw error if we have clear evidence of truncation:
+    // Text ends with an incomplete gap pattern (missing closing parenthesis)
+    if (hasIncompleteGap) {
       throw new Error(
         `AI response was truncated. The exercise generation was cut off before completion.\n\n` +
         `Generated so far: "${trimmedText.substring(0, 200)}${trimmedText.length > 200 ? '...' : ''}"\n\n` +
         `This usually happens when the response is too long. Try:\n` +
         `1. Simplifying the topic prompt\n` +
         `2. Requesting shorter exercises\n` +
-        `3. The maxOutputTokens has been increased to prevent this`
+        `3. The maxOutputTokens has been increased to 2000 to prevent this`
       );
+    }
+    
+    // Log warning if finishReason suggests truncation but text looks complete
+    if (finishReason === 'MAX_TOKENS') {
+      console.warn(`⚠️ Finish reason was MAX_TOKENS. Response length: ${trimmedText.length} chars. If the exercise looks complete, this is safe to ignore.`);
     }
 
     // Validate and convert AI-generated text (____ (answer) format) to HTML markdown with <input> tags

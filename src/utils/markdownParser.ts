@@ -8,6 +8,7 @@ export interface ParsedGap {
   isGap: boolean;
   correctAnswer?: string;
   index: number;
+  inputType?: 'text' | 'textarea'; // Type of input field
 }
 
 export interface ParsedMarkdown {
@@ -16,17 +17,30 @@ export interface ParsedMarkdown {
 }
 
 /**
- * Extract correct answers from HTML markdown with <input> tags
- * Pattern: <input[^>]*data-answer="([^"]*)"[^>]*>
+ * Extract correct answers from HTML markdown with <input> or <textarea> tags
+ * Pattern: <input[^>]*data-answer="([^"]*)"[^>]*> or <textarea[^>]*data-answer="([^"]*)"[^>]*>
  */
 export const extractCorrectAnswers = (markdown: string): string[] => {
   const answers: string[] = [];
+  const text = markdown ?? '';
   // Match <input> tags with data-answer attribute
   const inputPattern = /<input[^>]*data-answer="([^"]*)"[^>]*>/gi;
   let match;
 
-  while ((match = inputPattern.exec(markdown)) !== null) {
+  while ((match = inputPattern.exec(text)) !== null) {
     // Unescape HTML entities
+    const answer = match[1]
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    answers.push(answer);
+  }
+
+  // Also match <textarea> tags with data-answer attribute (for dictation)
+  const textareaPattern = /<textarea[^>]*data-answer="([^"]*)"[^>]*>/gi;
+  while ((match = textareaPattern.exec(text)) !== null) {
     const answer = match[1]
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
@@ -40,14 +54,25 @@ export const extractCorrectAnswers = (markdown: string): string[] => {
 };
 
 /**
+ * Extract audio URL from markdown
+ * Looks for <audio src="..."> tags
+ */
+export const extractAudioUrl = (markdown: string): string | null => {
+  const text = markdown ?? '';
+  const audioPattern = /<audio[^>]*src=["']([^"']+)["'][^>]*>/i;
+  const match = text.match(audioPattern);
+  return match ? match[1] : null;
+};
+
+/**
  * Parse HTML markdown text and extract gaps
  * Only supports <input data-answer="..."> format
  */
 export const parseMarkdown = (markdown: string): ParsedMarkdown => {
   const parts: ParsedGap[] = [];
-  
+  const text = markdown ?? '';
   // Extract answers from <input> tags
-  const extractedAnswers = extractCorrectAnswers(markdown);
+  const extractedAnswers = extractCorrectAnswers(text);
 
   // Pattern for <input> tags with data-answer
   const inputPattern = /<input[^>]*data-answer="([^"]*)"[^>]*>/gi;
@@ -56,10 +81,10 @@ export const parseMarkdown = (markdown: string): ParsedMarkdown => {
   let match;
 
   // Parse <input> tags
-  while ((match = inputPattern.exec(markdown)) !== null) {
+  while ((match = inputPattern.exec(text)) !== null) {
     // Add text before input tag
     if (match.index > lastIndex) {
-      let textBefore = markdown.substring(lastIndex, match.index);
+      let textBefore = text.substring(lastIndex, match.index);
       // Strip HTML tags like <p>, </p>, <br>, etc. but keep the text content
       textBefore = textBefore
         .replace(/<p[^>]*>/gi, '')  // Remove opening <p> tags
@@ -87,8 +112,8 @@ export const parseMarkdown = (markdown: string): ParsedMarkdown => {
   }
 
   // Add remaining text
-  if (lastIndex < markdown.length) {
-    let remainingText = markdown.substring(lastIndex);
+  if (lastIndex < text.length) {
+    let remainingText = text.substring(lastIndex);
     // Strip HTML tags from remaining text
     remainingText = remainingText
       .replace(/<p[^>]*>/gi, '')  // Remove opening <p> tags
@@ -133,6 +158,22 @@ export const transformMarkdownWithAnswers = (
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+    return escapedAnswer;
+  });
+
+  // Also replace <textarea data-answer="...">...</textarea> with user's answer (for dictation)
+  const textareaPattern = /<textarea[^>]*data-answer="[^"]*"[^>]*>.*?<\/textarea>/gi;
+  result = result.replace(textareaPattern, () => {
+    const answer = answers[answerIndex] || '';
+    answerIndex++;
+    // Escape HTML special characters and preserve newlines
+    const escapedAnswer = answer
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/\n/g, '<br>');
     return escapedAnswer;
   });
 

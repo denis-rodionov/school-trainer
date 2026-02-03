@@ -29,12 +29,15 @@ import {
 import { getTopic } from '../../services/topics';
 import { Worksheet, Exercise } from '../../types';
 import ExerciseBlock from './ExerciseBlock';
-import { transformMarkdownWithAnswers, extractCorrectAnswers } from '../../utils/markdownParser';
+import DictationExerciseBlock from './DictationExerciseBlock';
+import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl } from '../../utils/markdownParser';
+import { extractDictationAnswer } from '../../utils/dictationParser';
+import { fuzzyMatchText } from '../../utils/dictationScoring';
 import {
   updateSubjectStatistics,
   getSubjectData,
 } from '../../services/users';
-import { generateExercises } from '../../services/ai';
+import { generateExerciseForTopic } from '../../services/exerciseGenerator';
 import { isWithinLastDays } from '../../utils/dateUtils';
 import { Timestamp } from 'firebase/firestore';
 import { printWorksheet } from '../../services/printing';
@@ -69,6 +72,14 @@ const WorksheetScreen: React.FC = () => {
   const isPending = worksheet?.status === 'pending';
   const isReviewMode = isTrainer && isPending; // Trainer reviewing a pending worksheet
   const isReadOnly = (isTrainer && !isReviewMode) || isCompleted; // Read-only unless trainer is in review mode
+
+  // Helper function to check if an exercise is a dictation exercise (audio or dictation markdown structure)
+  const isDictationExercise = (exercise: Exercise): boolean => {
+    const md = exercise.markdown ?? '';
+    if (exercise.audioUrl || extractAudioUrl(md)) return true;
+    // Markdown with textarea data-answer (dictation) even without audio
+    return /<textarea[^>]*data-answer=["']/i.test(md);
+  };
 
   useEffect(() => {
     if (!worksheetId) return;
@@ -113,10 +124,15 @@ const WorksheetScreen: React.FC = () => {
         }
         setTopicsMap(topics);
 
-        // Initialize answers - calculate total number of gaps from markdown
+        // Initialize answers - calculate total number of gaps/answers needed
+        // For FILL_GAPS: count gaps, for DICTATION: count as 1 answer per exercise
         const totalGaps = sortedExercises.reduce((sum, ex) => {
-          const correctAnswers = extractCorrectAnswers(ex.markdown);
-          return sum + correctAnswers.length;
+          if (isDictationExercise(ex)) {
+            return sum + 1; // Dictation exercises have 1 answer (the full text)
+          } else {
+            const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
+            return sum + correctAnswers.length;
+          }
         }, 0);
         
         // Initialize attempts (1 for each exercise, will be incremented on wrong answers)
@@ -126,13 +142,21 @@ const WorksheetScreen: React.FC = () => {
         // Reset mistake count and exercises with mistakes when loading a new worksheet
         setMistakeCount(null);
         setExercisesWithMistakesIds(new Set());
-        
-        if (isCompleted) {
-          // For completed worksheets, we'll show userInput text
-          setAnswers(new Array(totalGaps).fill(''));
-        } else {
-          setAnswers(new Array(totalGaps).fill(''));
+
+        // Build initial answers (empty, then fill from exercise.userInput for completed/pending so trainer sees student answer)
+        const initialAnswers = new Array(totalGaps).fill('');
+        let answerSlot = 0;
+        for (const ex of sortedExercises) {
+          if (isDictationExercise(ex)) {
+            if (ex.userInput != null && ex.userInput !== '') {
+              initialAnswers[answerSlot] = ex.userInput;
+            }
+            answerSlot += 1;
+          } else {
+            answerSlot += extractCorrectAnswers(ex.markdown ?? '').length;
+          }
         }
+        setAnswers(initialAnswers);
       } catch (err: any) {
         setError(err.message || t('error.failedToLoadWorksheet'));
       } finally {
@@ -168,23 +192,40 @@ const WorksheetScreen: React.FC = () => {
     let allCorrect = true;
 
     exercises.forEach((exercise, exerciseIndex) => {
-      const correctAnswers = extractCorrectAnswers(exercise.markdown);
       let exerciseHasError = false;
       const exerciseAnswers: string[] = [];
 
-      correctAnswers.forEach((correctAnswer) => {
-        const userAnswer = answers[globalIndex]?.trim().toLowerCase();
-        const correct = correctAnswer.trim().toLowerCase();
-        const isError = userAnswer !== correct;
+      if (isDictationExercise(exercise)) {
+        // Dictation exercise: single answer with fuzzy matching
+        const correctAnswer = extractDictationAnswer(exercise.markdown);
+        const userAnswer = answers[globalIndex] || '';
+        const isError = !fuzzyMatchText(userAnswer, correctAnswer);
+        
         newErrors[globalIndex] = isError;
-        exerciseAnswers.push(answers[globalIndex] || '');
+        exerciseAnswers.push(userAnswer);
 
         if (isError) {
           exerciseHasError = true;
           allCorrect = false;
         }
         globalIndex++;
-      });
+      } else {
+        // Fill gaps exercise: multiple answers with exact matching
+        const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+        correctAnswers.forEach((correctAnswer) => {
+          const userAnswer = answers[globalIndex]?.trim().toLowerCase();
+          const correct = correctAnswer.trim().toLowerCase();
+          const isError = userAnswer !== correct;
+          newErrors[globalIndex] = isError;
+          exerciseAnswers.push(answers[globalIndex] || '');
+
+          if (isError) {
+            exerciseHasError = true;
+            allCorrect = false;
+          }
+          globalIndex++;
+        });
+      }
 
       if (exerciseHasError) {
         exercisesWithMistakesSet.add(exercise.id);
@@ -202,21 +243,23 @@ const WorksheetScreen: React.FC = () => {
       setExercisesWithMistakesIds(new Set(exercisesWithMistakesSet)); // Store which exercises had mistakes
       
       // Update attempts and previous answers for exercises with mistakes
+      let tempGlobalIndex = 0;
       exercises.forEach((exercise, exerciseIndex) => {
         if (exercisesWithMistakesSet.has(exercise.id)) {
-          const correctAnswers = extractCorrectAnswers(exercise.markdown);
           const exerciseAnswers: string[] = [];
           
-          // Find the start index for this exercise's answers
-          let globalStartIndex = 0;
-          for (let i = 0; i < exerciseIndex; i++) {
-            const exCorrectAnswers = extractCorrectAnswers(exercises[i].markdown);
-            globalStartIndex += exCorrectAnswers.length;
+          if (isDictationExercise(exercise)) {
+            // Dictation: single answer
+            exerciseAnswers.push(answers[tempGlobalIndex] || '');
+            tempGlobalIndex++;
+          } else {
+            // Fill gaps: multiple answers
+            const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+            correctAnswers.forEach(() => {
+              exerciseAnswers.push(answers[tempGlobalIndex] || '');
+              tempGlobalIndex++;
+            });
           }
-          
-          correctAnswers.forEach((_, answerIndex) => {
-            exerciseAnswers.push(answers[globalStartIndex + answerIndex] || '');
-          });
 
           const newPreviousAnswers = [...previousAnswers];
           newPreviousAnswers[exerciseIndex] = exerciseAnswers;
@@ -225,6 +268,14 @@ const WorksheetScreen: React.FC = () => {
           const newAttempts = [...attempts];
           newAttempts[exerciseIndex] = (newAttempts[exerciseIndex] || 1) + 1;
           setAttempts(newAttempts);
+        } else {
+          // Skip answers for exercises without mistakes
+          if (isDictationExercise(exercise)) {
+            tempGlobalIndex++;
+          } else {
+            const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+            tempGlobalIndex += correctAnswers.length;
+          }
         }
       });
 
@@ -251,6 +302,7 @@ const WorksheetScreen: React.FC = () => {
       // Use the exercisesWithMistakesIds from the first submit (doesn't change)
       const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
 
+      let tempGlobalIndexForUpdates = 0;
       exercises.forEach((exercise, exerciseIndex) => {
         // Check if this exercise had mistakes on first submit
         const hasError = exercisesWithMistakesIds.has(exercise.id);
@@ -261,9 +313,25 @@ const WorksheetScreen: React.FC = () => {
         // userInput: null if attempt === 1 (got it right first try)
         // userInput: last incorrect attempt if attempt > 1 (stored in previousAnswers)
         const lastIncorrectAttempt = previousAnswers[exerciseIndex] || [];
-        const userInput = attempt === 1 
-          ? null 
-          : transformMarkdownWithAnswers(exercise.markdown, lastIncorrectAttempt);
+        let userInput: string | null = null;
+        
+        if (attempt > 1) {
+          if (isDictationExercise(exercise)) {
+            // For dictation, userInput is just the text
+            userInput = lastIncorrectAttempt[0] || null;
+          } else {
+            // For fill gaps, transform markdown with answers
+            userInput = transformMarkdownWithAnswers(exercise.markdown ?? '', lastIncorrectAttempt);
+          }
+        }
+        
+        // Skip to next exercise's answers
+        if (isDictationExercise(exercise)) {
+          tempGlobalIndexForUpdates++;
+        } else {
+          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+          tempGlobalIndexForUpdates += correctAnswers.length;
+        }
 
         // Build updates object, only including userInput if it's not null
         const updates: Partial<Exercise> = {
@@ -279,6 +347,14 @@ const WorksheetScreen: React.FC = () => {
           exerciseId: exercise.id,
           updates,
         });
+        
+        // Skip to next exercise's answers
+        if (isDictationExercise(exercise)) {
+          tempGlobalIndexForUpdates++;
+        } else {
+          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+          tempGlobalIndexForUpdates += correctAnswers.length;
+        }
       });
 
       // Update exercises in database
@@ -496,10 +572,9 @@ const WorksheetScreen: React.FC = () => {
         if (!topic || !topic.prompt) continue;
 
         try {
-          // Generate exercises using AI with progress callback
-          const generatedExercises = await generateExercises(
-            topic.prompt,
-            topic.shortName,
+          // Generate exercises using the orchestrator (handles both FILL_GAPS and DICTATION)
+          const generatedExercises = await generateExerciseForTopic(
+            topic,
             assignment.count,
             (current, total) => {
               // Update progress: currentExerciseIndex + current exercises completed for this topic
@@ -510,12 +585,10 @@ const WorksheetScreen: React.FC = () => {
             }
           );
 
-          // Convert generated exercises to our format
-          generatedExercises.forEach((generated) => {
+          // Add generated exercises (already in correct format)
+          generatedExercises.forEach((exercise) => {
             exercises.push({
-              topicId: topic.id,
-              topicShortName: topic.shortName,
-              markdown: generated.markdown,
+              ...exercise,
               order: exerciseOrder++,
             });
           });
@@ -661,8 +734,12 @@ const WorksheetScreen: React.FC = () => {
           if (ex.topicId === topicId) {
             break;
           }
-          const exCorrectAnswers = extractCorrectAnswers(ex.markdown);
-          globalAnswerIndex += exCorrectAnswers.length;
+          if (isDictationExercise(ex)) {
+            globalAnswerIndex += 1; // Dictation exercises have 1 answer
+          } else {
+            const exCorrectAnswers = extractCorrectAnswers(ex.markdown ?? '');
+            globalAnswerIndex += exCorrectAnswers.length;
+          }
         }
 
         return (
@@ -671,39 +748,68 @@ const WorksheetScreen: React.FC = () => {
               {topic.taskDescription}
             </Typography>
             {topicExercises.map((exercise) => {
-              const exerciseCorrectAnswers = extractCorrectAnswers(exercise.markdown);
+              const isDictation = isDictationExercise(exercise);
               const exerciseAnswerStart = globalAnswerIndex;
-              const exerciseAnswers = answers.slice(
-                exerciseAnswerStart,
-                exerciseAnswerStart + exerciseCorrectAnswers.length
-              );
-              const exerciseErrors = errors.slice(
-                exerciseAnswerStart,
-                exerciseAnswerStart + exerciseCorrectAnswers.length
-              );
-
-              // Update globalAnswerIndex for next exercise
-              globalAnswerIndex += exerciseCorrectAnswers.length;
+              
+              let exerciseAnswers: string[];
+              let exerciseErrors: boolean[];
+              
+              if (isDictation) {
+                // Dictation: single answer
+                exerciseAnswers = [answers[exerciseAnswerStart] || ''];
+                exerciseErrors = [errors[exerciseAnswerStart] || false];
+                globalAnswerIndex += 1;
+              } else {
+                // Fill gaps: multiple answers
+                const exerciseCorrectAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+                exerciseAnswers = answers.slice(
+                  exerciseAnswerStart,
+                  exerciseAnswerStart + exerciseCorrectAnswers.length
+                );
+                exerciseErrors = errors.slice(
+                  exerciseAnswerStart,
+                  exerciseAnswerStart + exerciseCorrectAnswers.length
+                );
+                globalAnswerIndex += exerciseCorrectAnswers.length;
+              }
 
               // Check if this exercise is marked as having an error
               const isExerciseMarkedAsError = trainerMarkedErrors.has(exercise.id);
 
-              return (
-                <ExerciseBlock
-                  key={exercise.id}
-                  exercise={exercise}
-                  answers={exerciseAnswers}
-                  onAnswerChange={(localIndex, value) =>
-                    handleAnswerChange(exerciseAnswerStart + localIndex, value)
-                  }
-                  errors={exerciseErrors}
-                  isReadOnly={isReadOnly}
-                  showCorrectAnswers={isTrainer}
-                  isReviewMode={isReviewMode}
-                  isExerciseMarkedAsError={isExerciseMarkedAsError}
-                  onMarkError={() => handleMarkError(exercise.id)}
-                />
-              );
+              // Render appropriate component based on exercise type
+              if (isDictation) {
+                return (
+                  <DictationExerciseBlock
+                    key={exercise.id}
+                    exercise={{ ...exercise, markdown: exercise.markdown ?? '' }}
+                    answer={exerciseAnswers[0] || ''}
+                    onAnswerChange={(value) => handleAnswerChange(exerciseAnswerStart, value)}
+                    isReadOnly={isReadOnly}
+                    showCorrectAnswer={isTrainer}
+                    isReviewMode={isReviewMode}
+                    isExerciseMarkedAsError={isExerciseMarkedAsError}
+                    hasError={exerciseErrors[0] || false}
+                    onMarkError={() => handleMarkError(exercise.id)}
+                  />
+                );
+              } else {
+                return (
+                  <ExerciseBlock
+                    key={exercise.id}
+                    exercise={{ ...exercise, markdown: exercise.markdown ?? '' }}
+                    answers={exerciseAnswers}
+                    onAnswerChange={(localIndex, value) =>
+                      handleAnswerChange(exerciseAnswerStart + localIndex, value)
+                    }
+                    errors={exerciseErrors}
+                    isReadOnly={isReadOnly}
+                    showCorrectAnswers={isTrainer}
+                    isReviewMode={isReviewMode}
+                    isExerciseMarkedAsError={isExerciseMarkedAsError}
+                    onMarkError={() => handleMarkError(exercise.id)}
+                  />
+                );
+              }
             })}
           </Paper>
         );
@@ -729,7 +835,7 @@ const WorksheetScreen: React.FC = () => {
             variant="contained"
             color="primary"
             onClick={handleSubmit}
-            disabled={saving || answers.length === 0 || answers.some((a) => !a.trim())}
+            disabled={saving || answers.length === 0 || answers.every((a) => !a.trim())}
             size="large"
           >
             {saving ? t('worksheet.submit') + '...' : t('worksheet.submit')}

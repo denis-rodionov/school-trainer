@@ -1,5 +1,6 @@
 import { Worksheet, Exercise, Topic } from '../types';
-import { parseMarkdown } from '../utils/markdownParser';
+import { parseMarkdown, extractAudioUrl } from '../utils/markdownParser';
+import { extractDictationAnswer } from '../utils/dictationParser';
 import { format } from 'date-fns';
 
 interface PrintWorksheetOptions {
@@ -16,9 +17,18 @@ interface PrintWorksheetOptions {
 /**
  * Converts markdown with input tags to print-friendly HTML
  * Replaces input fields with clearly visible gaps
+ * For dictation exercises, shows audio icon indicator only (no correct text)
  */
-const convertMarkdownToPrintHtml = (markdown: string): string => {
-  // Parse the markdown to get text and gaps
+const convertMarkdownToPrintHtml = (markdown: string, exercise?: Exercise): string => {
+  // Check if this is a dictation exercise
+  const isDictation = !!(exercise?.audioUrl || extractAudioUrl(markdown));
+  
+  if (isDictation) {
+    // For dictation: show audio icon indicator only, no correct text
+    return '<span class="dictation-indicator">🎧 [Audio Dictation]</span>';
+  }
+  
+  // For fill gaps: parse and show gaps
   const parsed = parseMarkdown(markdown);
   let html = '';
 
@@ -274,7 +284,7 @@ export const generatePrintHtml = ({
                 <div class="topic-title">${topic.taskDescription}</div>
                 ${topicExercises
                   .map((exercise) => {
-                    const exerciseHtml = convertMarkdownToPrintHtml(exercise.markdown);
+                    const exerciseHtml = convertMarkdownToPrintHtml(exercise.markdown, exercise);
                     return `
                       <div class="exercise">
                         <div class="exercise-content">${exerciseHtml}</div>

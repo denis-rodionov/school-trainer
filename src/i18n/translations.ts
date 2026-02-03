@@ -70,6 +70,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'topics.testExercisePreview': 'Test Exercise Preview:',
     'topics.translate': 'DE',
     'topics.revert': 'Revert',
+    'topics.type': 'Exercise Type',
+    'topics.typeFillGaps': 'Fill Gaps',
+    'topics.typeDictation': 'Dictation',
     
     // Students
     'students.title': 'Students',
@@ -172,7 +175,16 @@ export const translations: Record<Language, Record<string, string>> = {
     // Exercise Block
     'exercise.correct': 'Correct:',
     'exercise.incorrect': 'Incorrect',
+    'exercise.noContent': 'No visible content',
     'exercise.userInput': 'User input:',
+    'exercise.dictation.listen': 'Listen to the audio and write what you hear',
+    'exercise.dictation.audioNotAvailable': 'Audio not available',
+    'exercise.dictation.correctNotAvailable': '(Correct transcription not available)',
+    'exercise.dictation.diffNoDetails': 'Word-level details not available.',
+    'exercise.dictation.missingChip': '—',
+    'exercise.dictation.playAudio': 'Play Audio',
+    'exercise.dictation.pauseAudio': 'Pause Audio',
+    'exercise.dictation.placeholder': 'Write what you hear...',
     
     // Common phrases
     'common.unknownDate': 'Unknown date',
@@ -247,6 +259,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'topics.testExercisePreview': 'Предпросмотр тестового упражнения:',
     'topics.translate': 'DE',
     'topics.revert': 'Отменить',
+    'topics.type': 'Тип упражнения',
+    'topics.typeFillGaps': 'Заполнить пропуски',
+    'topics.typeDictation': 'Диктант',
     
     // Students
     'students.title': 'Студенты',
@@ -349,7 +364,16 @@ export const translations: Record<Language, Record<string, string>> = {
     // Exercise Block
     'exercise.correct': 'Правильно:',
     'exercise.incorrect': 'Неверно',
+    'exercise.noContent': 'Нет видимого содержимого',
     'exercise.userInput': 'Ввод пользователя:',
+    'exercise.dictation.listen': 'Прослушайте аудио и напишите то, что вы слышите',
+    'exercise.dictation.audioNotAvailable': 'Аудио недоступно',
+    'exercise.dictation.correctNotAvailable': '(Правильная транскрипция недоступна)',
+    'exercise.dictation.diffNoDetails': 'Детали по словам недоступны.',
+    'exercise.dictation.missingChip': '—',
+    'exercise.dictation.playAudio': 'Воспроизвести аудио',
+    'exercise.dictation.pauseAudio': 'Пауза',
+    'exercise.dictation.placeholder': 'Напишите то, что вы слышите...',
     
     // Common phrases
     'common.unknownDate': 'Неизвестная дата',
@@ -424,6 +448,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'topics.testExercisePreview': 'Vorschau der Testübung:',
     'topics.translate': 'DE',
     'topics.revert': 'Rückgängig',
+    'topics.type': 'Übungstyp',
+    'topics.typeFillGaps': 'Lücken füllen',
+    'topics.typeDictation': 'Diktat',
     
     // Students
     'students.title': 'Schüler',
@@ -526,7 +553,16 @@ export const translations: Record<Language, Record<string, string>> = {
     // Exercise Block
     'exercise.correct': 'Richtig:',
     'exercise.incorrect': 'Falsch',
+    'exercise.noContent': 'Kein sichtbarer Inhalt',
     'exercise.userInput': 'Benutzereingabe:',
+    'exercise.dictation.listen': 'Hören Sie sich das Audio an und schreiben Sie auf, was Sie hören',
+    'exercise.dictation.audioNotAvailable': 'Audio nicht verfügbar',
+    'exercise.dictation.correctNotAvailable': '(Korrekte Transkription nicht verfügbar)',
+    'exercise.dictation.diffNoDetails': 'Wortdetails nicht verfügbar.',
+    'exercise.dictation.missingChip': '—',
+    'exercise.dictation.playAudio': 'Audio abspielen',
+    'exercise.dictation.pauseAudio': 'Pause',
+    'exercise.dictation.placeholder': 'Schreiben Sie auf, was Sie hören...',
     
     // Common phrases
     'common.unknownDate': 'Unbekanntes Datum',

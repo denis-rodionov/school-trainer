@@ -29,15 +29,32 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   onMarkError,
 }) => {
   const { t } = useLanguage();
+  const markdown = exercise.markdown ?? '';
   // Extract correct answers from markdown
-  const correctAnswers = extractCorrectAnswers(exercise.markdown);
-  const parsed = parseMarkdown(exercise.markdown);
+  const correctAnswers = extractCorrectAnswers(markdown);
+  const parsed = parseMarkdown(markdown);
   let answerIndex = 0;
 
+  // Fallback when markdown has no <input> tags (e.g. wrong format or dictation stored as fill-gaps): show stripped text so content is visible in trainer view
+  const hasNoParts = !parsed.parts.length || parsed.parts.every((p) => !p.isGap && !(p.text || '').trim());
+  const fallbackText = hasNoParts
+    ? markdown
+        .replace(/<p[^>]*>/gi, '')
+        .replace(/<\/p>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .trim()
+    : '';
+
   return (
-    <Paper sx={{ p: 2, mb: 2, backgroundColor: errors.some((e) => e) || isExerciseMarkedAsError ? '#ffebee' : 'transparent' }}>
+    <Paper sx={{ p: 2, mb: 2, minHeight: 56, backgroundColor: errors.some((e) => e) || isExerciseMarkedAsError ? '#ffebee' : 'transparent' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
-        {parsed.parts.map((part, partIndex) => {
+        {hasNoParts ? (
+          <Typography component="span" sx={{ fontSize: '16px', lineHeight: '40px', display: 'inline-block', flex: 1 }}>
+            {fallbackText || t('exercise.noContent')}
+          </Typography>
+        ) : (
+        parsed.parts.map((part, partIndex) => {
           if (part.isGap) {
             const currentAnswerIndex = answerIndex++;
             const hasError = errors[currentAnswerIndex];
@@ -86,10 +103,11 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 }}
               >
                 {part.text}
-              </Typography>
-            );
-          }
-        })}
+            </Typography>
+          );
+        }
+        })
+        )}
         {isReviewMode && !isExerciseMarkedAsError && (
           <IconButton
             size="small"

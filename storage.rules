@@ -1,0 +1,11 @@
+rules_version = '2';
+// Firebase Storage rules — deploy with: firebase deploy --only storage
+// Required for dictation audio uploads from the web app (including localhost).
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Dictation audio: authenticated users can read/write (trainers generate, students read)
+    match /dictation/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

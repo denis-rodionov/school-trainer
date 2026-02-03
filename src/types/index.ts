@@ -8,6 +8,8 @@ export type WorksheetStatus = 'pending' | 'completed';
 
 export type Language = 'en' | 'ru' | 'de';
 
+export type TopicType = 'FILL_GAPS' | 'DICTATION';
+
 export interface User {
   uid: string;
   email: string;
@@ -42,6 +44,7 @@ export interface Topic {
   createdAt: Timestamp;
   createdBy: string;
   defaultExerciseCount?: number;
+  type?: TopicType; // Optional, defaults to 'FILL_GAPS' for backward compatibility
 }
 
 export interface Worksheet {
@@ -58,8 +61,9 @@ export interface Exercise {
   id: string;
   topicId: string;
   topicShortName: string;
-  markdown: string; // Contains <input> tags with data-answer attributes for correct answers
+  markdown: string; // Contains <input> tags with data-answer attributes for correct answers, or <audio> and <textarea> for dictation
   userInput?: string; // Last incorrect attempt (null if attempt === 1, i.e., got it right on first try)
   attempt?: number; // Number of attempts before getting it right (1 = first try correct, >1 = multiple attempts)
   order: number;
+  audioUrl?: string; // Optional, only for DICTATION exercises
 }

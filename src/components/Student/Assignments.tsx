@@ -29,7 +29,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
 import { extractGaps } from '../../utils/markdownParser';
-import { generateExercises } from '../../services/ai';
+import { generateExerciseForTopic } from '../../services/exerciseGenerator';
 
 interface AssignmentsProps {
   subject: Subject;
@@ -123,10 +123,9 @@ const Assignments: React.FC<AssignmentsProps> = ({
         if (!topic || !topic.prompt) continue;
 
         try {
-          // Generate exercises using AI with progress callback
-          const generatedExercises = await generateExercises(
-            topic.prompt,
-            topic.shortName,
+          // Generate exercises using the orchestrator (handles both FILL_GAPS and DICTATION)
+          const generatedExercises = await generateExerciseForTopic(
+            topic,
             assignment.count,
             (current, total) => {
               // Update progress: currentExerciseIndex + current exercises completed for this topic
@@ -137,12 +136,10 @@ const Assignments: React.FC<AssignmentsProps> = ({
             }
           );
 
-          // Convert generated exercises to our format
-          generatedExercises.forEach((generated, index) => {
+          // Add generated exercises (already in correct format)
+          generatedExercises.forEach((exercise) => {
             exercises.push({
-              topicId: topic.id,
-              topicShortName: topic.shortName,
-              markdown: generated.markdown, // Markdown contains <input> tags with data-answer attributes
+              ...exercise,
               order: exerciseOrder++,
             });
           });
