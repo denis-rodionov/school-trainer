@@ -73,7 +73,47 @@ export const generateExercise = async (
     );
   }
 
-  // Build the system prompt
+  // Generate randomization elements to encourage diversity
+  const randomSeed = Math.floor(Math.random() * 1000000);
+  const timestamp = Date.now();
+  const randomVariation = Math.floor(Math.random() * 100);
+  
+  // Generate random number ranges to encourage variety
+  // Use the random seed to create different "preferred ranges" for each exercise
+  const rangeStart = (randomSeed % 50) + 1; // 1-50
+  const rangeEnd = rangeStart + 20 + (randomVariation % 30); // Range of 20-50 numbers
+  const preferredRange = `${rangeStart}-${rangeEnd}`;
+  
+  // Create a "number selection strategy" based on exercise number and seed
+  const strategies = [
+    'Use numbers from different ranges - mix small, medium, and large numbers',
+    'Vary number patterns - use odd numbers, even numbers, prime numbers, composite numbers',
+    'Explore different number ranges - don\'t stick to the same range',
+    'Use the random seed to pick numbers - let it guide your selection',
+    'Vary number magnitudes - mix single digits, double digits, triple digits',
+  ];
+  const numberStrategy = strategies[request.exerciseNumber % strategies.length];
+  
+  // Vary the instruction phrasing to encourage different outputs
+  const diversityInstructions = [
+    'CRITICAL: Generate a UNIQUE exercise. Use different content, different wording, different structure.',
+    'IMPORTANT: This must be COMPLETELY DIFFERENT from any previous exercise. Vary all aspects: content, words, format, order.',
+    'ESSENTIAL: Create a DISTINCT exercise. Change the values/content, change the phrasing, change the approach.',
+    'REQUIRED: Generate a FRESH exercise. Use different examples, different content, different presentation style.',
+    'MANDATORY: Produce an ORIGINAL exercise. Vary content, vary structure, vary presentation completely.',
+  ];
+  const diversityInstruction = diversityInstructions[request.exerciseNumber % diversityInstructions.length];
+  
+  // Add variation hints based on exercise number and random seed
+  const variationHints = [
+    `Use variation pattern ${randomVariation}.`,
+    `Apply diversity modifier ${randomSeed % 1000}.`,
+    `Follow uniqueness rule ${request.exerciseNumber * 7 + randomVariation}.`,
+    `Use creative approach ${(request.exerciseNumber + randomSeed) % 50}.`,
+  ];
+  const variationHint = variationHints[request.exerciseNumber % variationHints.length];
+  
+  // Build the system prompt with enhanced diversity instructions (general for all subjects)
   const systemPrompt = `You are an educational exercise generator. Generate a single exercise based on the given prompt.
 
 Requirements:
@@ -84,17 +124,35 @@ Requirements:
 5. Each gap must be followed by its correct answer in parentheses
 6. Make it clear and educational
 7. Return ONLY the exercise text with gaps marked as ____ (answer)
-8. IMPORTANT: Generate a DIFFERENT exercise each time. Vary the content, structure, and values. Do not repeat the same exercise.
+8. ${diversityInstruction}
+9. CRITICAL: Vary the content, values, words, and structure DRAMATICALLY from any previous exercises
+10. Use COMPLETELY different examples, different word choices, different sentence structures, different contexts
+11. AVOID repeating the same content, same values, same wording, or same structure - even if they fit the prompt
+12. Be CREATIVE and ORIGINAL - each exercise should feel completely fresh and unique
+13. If using numbers: ${numberStrategy}. Use the random seed ${randomSeed} to select numbers - convert it to guide your number choices (e.g., use seed mod 100, or seed/1000, or other transformations). EXPLORE the full range of valid numbers - don't repeat the same numbers from previous exercises.
+14. If using words, use DIFFERENT vocabulary, different sentence patterns, different contexts
+15. ${variationHint}
+16. Think RANDOMLY and UNPREDICTABLY - surprise yourself with unusual choices that still fit the prompt
+17. CRITICAL: Use the random seed ${randomSeed} actively - transform it mathematically to select different numbers/words. For example: (seed % 100), (seed / 1000), (seed * 7 % 50), etc. This ensures each exercise uses different values.
 
-Example formats:
+Example formats (DO NOT copy these exactly - create your own variations):
 "5 + ____ (3) = 8"
 "4+2=____ (6)"
 "Fill in the blank: The capital of France is ____ (Paris)"
 "Complete: I ____ (am) a student."
+"Der ____ (Hund) ist braun."
+"Translate: I am ____ (ich bin) a student."
 
 Generate exercise ${request.exerciseNumber} based on this prompt: ${request.prompt}
 
-Remember: This is exercise ${request.exerciseNumber}, so make it different from previous exercises.`;
+Diversity seed: ${randomSeed} | Timestamp: ${timestamp} | Variation: ${randomVariation}
+ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COMPLETELY DIFFERENT from exercise ${request.exerciseNumber - 1} and ANY other exercise. 
+- Use DIFFERENT content, DIFFERENT words, DIFFERENT structure
+- If using numbers: USE THE RANDOM SEED ${randomSeed} to mathematically derive your numbers. Transform the seed: try (seed % 100), (seed / 1000 % 50), (seed * 3 % 99), etc. This ensures you use DIFFERENT numbers each time. EXPLORE the full valid range - don't stick to the same few numbers.
+- If using words, use DIFFERENT vocabulary and sentence patterns
+- Be UNPREDICTABLE and CREATIVE - make unexpected choices that still follow the prompt requirements
+- Think outside the box - surprise with variety
+- Number selection: Use mathematical transformations of seed ${randomSeed} to pick numbers. Example: if seed=123456, try 123456%100=56, but also try 123456/1000%50=23, or 123456*7%99=84. Vary the transformation formula each time.`;
 
   // Get model name and API version from environment variables or use defaults
   // Using gemini-2.5-flash (cheapest Flash model, newest version) with v1beta API
@@ -117,7 +175,9 @@ Remember: This is exercise ${request.exerciseNumber}, so make it different from 
         }],
         generationConfig: {
           maxOutputTokens: 1000, // Increased to prevent truncation of longer exercises
-          temperature: 1.0, // Higher temperature for more variation between exercises
+          temperature: 1.4, // Maximum temperature (1.4) for maximum variation and creativity
+          topP: 0.9, // Lower topP (0.9 instead of 0.95) to consider more diverse token options
+          topK: 20, // Lower topK (20 instead of 40) to force more exploration of less likely tokens
         },
       }),
     });
