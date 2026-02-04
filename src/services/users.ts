@@ -69,6 +69,24 @@ export const updateSubjectStatistics = async (
   await updateDoc(subjectRef, { statistics });
 };
 
+export const updateSubjectGrade = async (
+  uid: string,
+  subject: Subject,
+  grade: number | null,
+  gradeUpdatedDate: Timestamp
+): Promise<void> => {
+  const subjectRef = doc(db, 'users', uid, 'subjects', subject);
+  // Get current statistics to merge
+  const currentDoc = await getDoc(subjectRef);
+  const currentStats = currentDoc.exists() ? (currentDoc.data().statistics || {}) : {};
+  const updatedStatistics = {
+    ...currentStats,
+    grade,
+    gradeUpdatedDate,
+  };
+  await updateDoc(subjectRef, { statistics: updatedStatistics });
+};
+
 export const updateSubjectTopicAssignments = async (
   uid: string,
   subject: Subject,

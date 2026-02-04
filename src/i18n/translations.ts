@@ -41,6 +41,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.worksheetsCompletedLast7Days': 'Worksheets completed in last 7 days',
     'dashboard.lastWorksheet': 'Last worksheet',
     
+    // Grades
+    'grade.1': 'Excellent / Very Good',
+    'grade.2': 'Good',
+    'grade.3': 'Satisfactory',
+    'grade.4': 'Sufficient / Pass',
+    'grade.5': 'Deficient / Poor',
+    'grade.6': 'Insufficient / Fail',
+    'grade.noGrade': 'Complete the first worksheet to see the grade.',
+    
     // Worksheet
     'worksheet.title': 'Worksheet',
     'worksheet.score': 'Score',
@@ -231,6 +240,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.worksheetsCompletedLast7Days': 'Рабочих листов выполнено за последние 7 дней',
     'dashboard.lastWorksheet': 'Последний рабочий лист',
     
+    // Grades
+    'grade.1': 'Отлично',
+    'grade.2': 'Хорошо',
+    'grade.3': 'Удовлетворительно',
+    'grade.4': 'Достаточно',
+    'grade.5': 'Неудовлетворительно',
+    'grade.6': 'Очень плохо',
+    'grade.noGrade': 'Выполните первый рабочий лист, чтобы увидеть оценку.',
+    
     // Worksheet
     'worksheet.title': 'Рабочий лист',
     'worksheet.score': 'Оценка',
@@ -420,6 +438,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.yearsAgo': 'Jahre her',
     'dashboard.worksheetsCompletedLast7Days': 'Arbeitsblätter in den letzten 7 Tagen abgeschlossen',
     'dashboard.lastWorksheet': 'Letztes Arbeitsblatt',
+    
+    // Grades
+    'grade.1': 'Sehr Gut',
+    'grade.2': 'Gut',
+    'grade.3': 'Befriedigend',
+    'grade.4': 'Ausreichend',
+    'grade.5': 'Mangelhaft',
+    'grade.6': 'Ungenügend',
+    'grade.noGrade': 'Vervollständige das erste Arbeitsblatt, um die Note zu sehen.',
     
     // Worksheet
     'worksheet.title': 'Arbeitsblatt',

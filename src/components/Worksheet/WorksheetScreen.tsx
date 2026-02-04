@@ -22,7 +22,6 @@ import {
   getWorksheet,
   getExercises,
   completeWorksheet,
-  updateWorksheet,
   deleteWorksheet,
   createWorksheet,
 } from '../../services/worksheets';
@@ -34,12 +33,9 @@ import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl } 
 import { extractDictationAnswer } from '../../utils/dictationParser';
 import { fuzzyMatchText } from '../../utils/dictationScoring';
 import {
-  updateSubjectStatistics,
   getSubjectData,
 } from '../../services/users';
 import { generateExerciseForTopic } from '../../services/exerciseGenerator';
-import { isWithinLastDays } from '../../utils/dateUtils';
-import { Timestamp } from 'firebase/firestore';
 import { printWorksheet } from '../../services/printing';
 
 const WorksheetScreen: React.FC = () => {
@@ -52,7 +48,6 @@ const WorksheetScreen: React.FC = () => {
   const [topicsMap, setTopicsMap] = useState<Record<string, any>>({});
   const [answers, setAnswers] = useState<string[]>([]);
   const [errors, setErrors] = useState<boolean[]>([]);
-  const [submitted, setSubmitted] = useState(false);
   const [attempts, setAttempts] = useState<number[]>([]); // Track attempts per exercise
   const [previousAnswers, setPreviousAnswers] = useState<string[][]>([]); // Track previous incorrect attempts per exercise
   const [loading, setLoading] = useState(true);
@@ -233,7 +228,6 @@ const WorksheetScreen: React.FC = () => {
     });
 
     setErrors(newErrors);
-    setSubmitted(true);
 
     // If mistakeCount is not set yet, this is the first submit
     // Calculate and store the mistake count and which exercises had mistakes, then return (don't submit yet)
@@ -302,7 +296,6 @@ const WorksheetScreen: React.FC = () => {
       // Use the exercisesWithMistakesIds from the first submit (doesn't change)
       const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
 
-      let tempGlobalIndexForUpdates = 0;
       exercises.forEach((exercise, exerciseIndex) => {
         // Check if this exercise had mistakes on first submit
         const hasError = exercisesWithMistakesIds.has(exercise.id);
@@ -324,14 +317,6 @@ const WorksheetScreen: React.FC = () => {
             userInput = transformMarkdownWithAnswers(exercise.markdown ?? '', lastIncorrectAttempt);
           }
         }
-        
-        // Skip to next exercise's answers
-        if (isDictationExercise(exercise)) {
-          tempGlobalIndexForUpdates++;
-        } else {
-          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-          tempGlobalIndexForUpdates += correctAnswers.length;
-        }
 
         // Build updates object, only including userInput if it's not null
         const updates: Partial<Exercise> = {
@@ -347,14 +332,6 @@ const WorksheetScreen: React.FC = () => {
           exerciseId: exercise.id,
           updates,
         });
-        
-        // Skip to next exercise's answers
-        if (isDictationExercise(exercise)) {
-          tempGlobalIndexForUpdates++;
-        } else {
-          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-          tempGlobalIndexForUpdates += correctAnswers.length;
-        }
       });
 
       // Update exercises in database
@@ -366,38 +343,22 @@ const WorksheetScreen: React.FC = () => {
       // Complete worksheet (userInputs no longer needed, exercises already updated)
       await completeWorksheet(worksheet.id, score);
 
-      // Update statistics - recalculate worksheets in last 7 days
+      // Calculate and update grade for the subject
       if (exercises.length > 0) {
         const firstExercise = exercises[0];
         const topic = await getTopic(firstExercise.topicId);
         if (topic) {
           const subject = topic.subject;
-          const subjectData = await getSubjectData(currentUser.uid, subject);
-          if (subjectData) {
-            // Get all completed worksheets in last 7 days
-            const { getCompletedWorksheets } = await import('../../services/worksheets');
-            const allCompleted = await getCompletedWorksheets(currentUser.uid, 100);
-            const last7Days = allCompleted.filter((w) =>
-              w.completedAt ? isWithinLastDays(w.completedAt, 7) : false
-            );
-
-            const newStatistics = {
-              worksheetsLast7Days: last7Days.length,
-              lastWorksheetDate: Timestamp.now(),
-            };
-
-            await updateSubjectStatistics(currentUser.uid, subject, newStatistics);
-          }
+          const { calculateAndUpdateGrade } = await import('../../services/gradeService');
+          await calculateAndUpdateGrade(currentUser.uid, subject);
         }
       }
 
       // Reload worksheet to show completed state
       const updatedWorksheet = await getWorksheet(worksheet.id);
       setWorksheet(updatedWorksheet);
-      setSubmitted(false);
     } catch (err: any) {
       alert(err.message || t('error.failedToSubmitWorksheet'));
-      setSubmitted(false); // Reset submitted state on error so button can be clicked again
     } finally {
       setSaving(false);
     }
@@ -489,29 +450,15 @@ const WorksheetScreen: React.FC = () => {
       // Complete worksheet with calculated score
       await completeWorksheet(worksheet.id, score);
 
-      // Update statistics for the student
+      // Calculate and update grade for the student's subject
       if (exercises.length > 0) {
         const firstExercise = exercises[0];
         const topic = await getTopic(firstExercise.topicId);
         if (topic) {
           const subject = topic.subject;
           const studentId = worksheet.studentId;
-          const subjectData = await getSubjectData(studentId, subject);
-          if (subjectData) {
-            // Get all completed worksheets in last 7 days
-            const { getCompletedWorksheets } = await import('../../services/worksheets');
-            const allCompleted = await getCompletedWorksheets(studentId, 100);
-            const last7Days = allCompleted.filter((w) =>
-              w.completedAt ? isWithinLastDays(w.completedAt, 7) : false
-            );
-
-            const newStatistics = {
-              worksheetsLast7Days: last7Days.length,
-              lastWorksheetDate: Timestamp.now(),
-            };
-
-            await updateSubjectStatistics(studentId, subject, newStatistics);
-          }
+          const { calculateAndUpdateGrade } = await import('../../services/gradeService');
+          await calculateAndUpdateGrade(studentId, subject);
         }
       }
 

@@ -21,14 +21,12 @@ import {
 import { Delete } from '@mui/icons-material';
 import { SubjectData, Subject, Topic, Exercise } from '../../types';
 import { getTopic } from '../../services/topics';
-import { formatWorksheetDate } from '../../utils/dateUtils';
 import { updateSubjectTopicAssignments } from '../../services/users';
 import { createWorksheet, getPendingWorksheetBySubject } from '../../services/worksheets';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
-import { extractGaps } from '../../utils/markdownParser';
 import { generateExerciseForTopic } from '../../services/exerciseGenerator';
 
 interface AssignmentsProps {
@@ -289,12 +287,30 @@ const Assignments: React.FC<AssignmentsProps> = ({
 
         {subjectData && (
           <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {t('dashboard.worksheetsCompletedLast7Days')}: {subjectData.statistics.worksheetsLast7Days}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {t('dashboard.lastWorksheet')}: {formatWorksheetDate(subjectData.statistics.lastWorksheetDate)}
-            </Typography>
+            {subjectData.statistics.grade === undefined || subjectData.statistics.grade === null ? (
+              <Typography variant="body2" color="text.secondary">
+                {t('grade.noGrade')}
+              </Typography>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h6" component="span" sx={{ fontWeight: 600 }}>
+                  {t(`grade.${subjectData.statistics.grade}`)}
+                </Typography>
+                <Typography variant="h4" component="span" sx={{ fontSize: '2.5rem', lineHeight: 1 }}>
+                  {(() => {
+                    const emojiMap: Record<number, string> = {
+                      1: '😍',
+                      2: '😊',
+                      3: '🙂',
+                      4: '😐',
+                      5: '😟',
+                      6: '😱',
+                    };
+                    return emojiMap[subjectData.statistics.grade] || '';
+                  })()}
+                </Typography>
+              </Box>
+            )}
           </Box>
         )}
 

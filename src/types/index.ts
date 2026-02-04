@@ -33,6 +33,8 @@ export interface TopicAssignment {
 export interface SubjectStatistics {
   worksheetsLast7Days: number;
   lastWorksheetDate?: Timestamp;
+  grade?: number; // 1-6 grade
+  gradeUpdatedDate?: Timestamp;
 }
 
 export interface Topic {

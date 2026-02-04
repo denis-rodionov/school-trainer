@@ -86,6 +86,24 @@ export const getCompletedWorksheets = async (
   return worksheetsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
 };
 
+export const getCompletedWorksheetsBySubject = async (
+  studentId: string,
+  subject: Subject,
+  limitCount: number = 50
+): Promise<Worksheet[]> => {
+  const q = query(
+    collection(db, 'worksheets'),
+    where('studentId', '==', studentId),
+    where('subject', '==', subject),
+    where('status', '==', 'completed'),
+    orderBy('completedAt', 'desc'),
+    limit(limitCount)
+  );
+  
+  const worksheetsSnapshot = await getDocs(q);
+  return worksheetsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Worksheet));
+};
+
 export const getRecentWorksheets = async (
   studentId: string,
   subject: Subject,

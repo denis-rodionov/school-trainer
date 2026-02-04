@@ -45,6 +45,7 @@ const StudentDetail: React.FC = () => {
       setSearchParams({ subject: subjects[0] }, { replace: true });
       if (subjectFromUrl) setTabValue(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjects, searchParams]);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
@@ -95,7 +96,26 @@ const StudentDetail: React.FC = () => {
           worksheetsMap.set(subject, worksheetsPromises[index]);
         });
 
-        setSubjectsData(dataMap);
+        // Check and recalculate grades for subjects that need it
+        const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
+        const gradeUpdatePromises = userSubjects.map(async (subject) => {
+          const data = dataMap.get(subject);
+          if (data && data.topicAssignments.length > 0) {
+            // Check if grade is stale or missing
+            if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
+              // Recalculate and update grade
+              await calculateAndUpdateGrade(studentId, subject);
+              // Refresh subject data to get updated grade
+              const updatedData = await getSubjectData(studentId, subject);
+              if (updatedData) {
+                dataMap.set(subject, updatedData);
+              }
+            }
+          }
+        });
+        await Promise.all(gradeUpdatePromises);
+
+        setSubjectsData(new Map(dataMap));
         setWorksheets(worksheetsMap);
       } catch (err: any) {
         setError(err.message || t('error.failedToLoadStudentData'));
@@ -105,7 +125,7 @@ const StudentDetail: React.FC = () => {
     };
 
     loadData();
-  }, [studentId]);
+  }, [studentId, t]);
 
   const handleAssignClick = () => {
     setAssignDialogOpen(true);
@@ -141,6 +161,7 @@ const StudentDetail: React.FC = () => {
       }
     };
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   };
 
   if (loading) {

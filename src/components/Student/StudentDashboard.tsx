@@ -41,6 +41,7 @@ const StudentDashboard: React.FC = () => {
       setSearchParams({ subject: subjects[0] }, { replace: true });
       if (subjectFromUrl) setTabValue(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjects, searchParams]);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
@@ -124,6 +125,28 @@ const StudentDashboard: React.FC = () => {
         setSubjectsData(dataMap);
         setWorksheets(worksheetsMap);
         
+        // Check and recalculate grades for subjects that need it
+        const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
+        const gradeUpdatePromises = userSubjects.map(async (subject) => {
+          const data = dataMap.get(subject);
+          if (data && data.topicAssignments.length > 0) {
+            // Check if grade is stale or missing
+            if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
+              // Recalculate and update grade
+              await calculateAndUpdateGrade(currentUser.uid, subject);
+              // Refresh subject data to get updated grade
+              const updatedData = await getSubjectData(currentUser.uid, subject);
+              if (updatedData) {
+                dataMap.set(subject, updatedData);
+              }
+            }
+          }
+        });
+        await Promise.all(gradeUpdatePromises);
+        
+        // Update state with refreshed data (including updated grades)
+        setSubjectsData(new Map(dataMap));
+        
         // Reset tab value if it's out of bounds
         setTabValue((prev) => prev >= userSubjects.length ? 0 : prev);
       } catch (err: any) {
@@ -134,7 +157,7 @@ const StudentDashboard: React.FC = () => {
     };
 
     loadData();
-  }, [currentUser, userData]);
+  }, [currentUser, userData, t]);
 
   const handlePractice = async (subject: Subject) => {
     if (!currentUser) return;
