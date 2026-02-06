@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import { getTopics, deleteTopic } from '../../services/topics';
-import { Topic, Subject } from '../../types';
+import { Topic } from '../../types';
 import TopicForm from './TopicForm';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
@@ -27,11 +27,7 @@ const TopicsScreen: React.FC = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
 
-  useEffect(() => {
-    loadTopics();
-  }, []);
-
-  const loadTopics = async () => {
+  const loadTopics = useCallback(async () => {
     try {
       setLoading(true);
       const allTopics = await getTopics();
@@ -41,7 +37,11 @@ const TopicsScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    loadTopics();
+  }, [loadTopics]);
 
   const handleCreate = () => {
     setEditingTopic(null);

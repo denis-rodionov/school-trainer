@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Language } from '../types';
-import { getTranslation, translations } from '../i18n/translations';
+import { getTranslation } from '../i18n/translations';
 import { useAuth } from './AuthContext';
 import { updateUserLanguage } from '../services/users';
 

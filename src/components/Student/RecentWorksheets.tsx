@@ -12,7 +12,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Worksheet } from '../../types';
 import { formatWorksheetDate } from '../../utils/dateUtils';
-import { Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { useLanguage } from '../../contexts/LanguageContext';
 

@@ -1,6 +1,5 @@
 import { Worksheet, Exercise, Topic } from '../types';
 import { parseMarkdown, extractAudioUrl } from '../utils/markdownParser';
-import { extractDictationAnswer } from '../utils/dictationParser';
 import { format } from 'date-fns';
 
 interface PrintWorksheetOptions {

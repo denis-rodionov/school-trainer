@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -29,7 +29,7 @@ import { getTopic } from '../../services/topics';
 import { Worksheet, Exercise } from '../../types';
 import ExerciseBlock from './ExerciseBlock';
 import DictationExerciseBlock from './DictationExerciseBlock';
-import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl } from '../../utils/markdownParser';
+import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl, extractDraftAnswers, updateMarkdownWithDraftAnswers } from '../../utils/markdownParser';
 import { extractDictationAnswer } from '../../utils/dictationParser';
 import { fuzzyMatchText } from '../../utils/dictationScoring';
 import {
@@ -61,6 +61,9 @@ const WorksheetScreen: React.FC = () => {
   const [trainerMarkedErrors, setTrainerMarkedErrors] = useState<Set<string>>(new Set()); // Track which exercises trainer marked as errors (by exercise ID)
   const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Track number of exercises with mistakes from first submit
   const [exercisesWithMistakesIds, setExercisesWithMistakesIds] = useState<Set<string>>(new Set()); // Track which exercises had mistakes on first submit (for updating attempts/userInput)
+  const [currentFocusedExerciseId, setCurrentFocusedExerciseId] = useState<string | null>(null); // Track which exercise is currently focused for auto-save
+  const answersRef = useRef<string[]>([]); // Ref to store current answers for unmount save
+  const isLoadingRef = useRef(false); // Prevent duplicate loads
 
   const isTrainer = userData?.role === 'trainer';
   const isCompleted = worksheet?.status === 'completed';
@@ -78,6 +81,10 @@ const WorksheetScreen: React.FC = () => {
 
   useEffect(() => {
     if (!worksheetId) return;
+    
+    // Prevent duplicate loads
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
 
     const loadWorksheet = async () => {
       try {
@@ -138,29 +145,108 @@ const WorksheetScreen: React.FC = () => {
         setMistakeCount(null);
         setExercisesWithMistakesIds(new Set());
 
-        // Build initial answers (empty, then fill from exercise.userInput for completed/pending so trainer sees student answer)
+        // Build initial answers (empty, then fill from draft answers in markdown, then from exercise.userInput for completed/pending so trainer sees student answer)
         const initialAnswers = new Array(totalGaps).fill('');
         let answerSlot = 0;
         for (const ex of sortedExercises) {
           if (isDictationExercise(ex)) {
-            if (ex.userInput != null && ex.userInput !== '') {
+            // First try to load from draft answers in markdown
+            const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
+            if (draftAnswers.length > 0 && draftAnswers[0]) {
+              initialAnswers[answerSlot] = draftAnswers[0];
+            } else if (ex.userInput != null && ex.userInput !== '') {
+              // Fallback to userInput for completed worksheets
               initialAnswers[answerSlot] = ex.userInput;
             }
             answerSlot += 1;
           } else {
-            answerSlot += extractCorrectAnswers(ex.markdown ?? '').length;
+            // Extract draft answers from markdown
+            const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
+            const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
+            console.log('Loading exercise markdown:', ex.markdown);
+            console.log('Extracted draft answers:', draftAnswers);
+            console.log('Correct answers count:', correctAnswers.length);
+            for (let i = 0; i < correctAnswers.length; i++) {
+              if (draftAnswers[i]) {
+                initialAnswers[answerSlot + i] = draftAnswers[i];
+              }
+            }
+            answerSlot += correctAnswers.length;
           }
         }
         setAnswers(initialAnswers);
+        answersRef.current = initialAnswers; // Update ref
       } catch (err: any) {
         setError(err.message || t('error.failedToLoadWorksheet'));
       } finally {
         setLoading(false);
+        isLoadingRef.current = false;
       }
     };
 
     loadWorksheet();
-  }, [worksheetId, currentUser, isTrainer]);
+    
+    // Reset loading flag when dependencies change
+    return () => {
+      isLoadingRef.current = false;
+    };
+  }, [worksheetId, currentUser, isTrainer, navigate, t]);
+
+  // Save current exercise on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup: save current exercise if we're unmounting
+      // Only run on actual unmount, not on dependency changes
+      if (currentFocusedExerciseId && worksheet && worksheet.status === 'pending' && !isTrainer && !isCompleted) {
+        const currentExercise = exercises.find((ex) => ex.id === currentFocusedExerciseId);
+        if (currentExercise) {
+          // Find answer start index
+          let answerStart = 0;
+          for (const ex of exercises) {
+            if (ex.id === currentExercise.id) {
+              break;
+            }
+            if (isDictationExercise(ex)) {
+              answerStart += 1;
+            } else {
+              answerStart += extractCorrectAnswers(ex.markdown ?? '').length;
+            }
+          }
+
+          // Get current answers from ref (always up-to-date)
+          const currentAnswers = answersRef.current;
+          
+          // Extract answers
+          let exerciseDraftAnswers: string[] = [];
+          if (isDictationExercise(currentExercise)) {
+            exerciseDraftAnswers = [currentAnswers[answerStart] || ''];
+          } else {
+            const correctAnswers = extractCorrectAnswers(currentExercise.markdown ?? '');
+            exerciseDraftAnswers = currentAnswers.slice(answerStart, answerStart + correctAnswers.length);
+          }
+
+          // Update markdown
+          const updatedMarkdown = updateMarkdownWithDraftAnswers(
+            currentExercise.markdown ?? '',
+            exerciseDraftAnswers
+          );
+
+          // Log before saving
+          console.log('saving exercise', updatedMarkdown);
+
+          // Save asynchronously (don't await - component is unmounting)
+          import('../../services/worksheets').then(({ updateExercise }) => {
+            updateExercise(worksheet.id, currentExercise.id, {
+              markdown: updatedMarkdown,
+            }).catch((err) => {
+              console.error('Failed to auto-save exercise on unmount:', err);
+            });
+          });
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run cleanup on unmount
 
   const handleAnswerChange = (index: number, value: string) => {
     if (isReadOnly) return;
@@ -173,6 +259,54 @@ const WorksheetScreen: React.FC = () => {
       newErrors[index] = false;
       setErrors(newErrors);
     }
+  };
+
+  // Handler for exercise blur - saves the exercise that lost focus
+  const handleExerciseBlur = async (exerciseId: string, answerStartIndex: number) => {
+    // Only auto-save for pending worksheets and students (not trainers)
+    if (isCompleted || isTrainer || !worksheet || worksheet.status !== 'pending') {
+      return;
+    }
+
+    // Save the exercise that lost focus
+    const exercise = exercises.find((ex) => ex.id === exerciseId);
+    if (exercise) {
+      try {
+        // Extract answers for this exercise
+        let exerciseDraftAnswers: string[] = [];
+        if (isDictationExercise(exercise)) {
+          exerciseDraftAnswers = [answers[answerStartIndex] || ''];
+        } else {
+          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+          exerciseDraftAnswers = answers.slice(answerStartIndex, answerStartIndex + correctAnswers.length);
+        }
+
+        // Update markdown with draft answers
+        const updatedMarkdown = updateMarkdownWithDraftAnswers(
+          exercise.markdown ?? '',
+          exerciseDraftAnswers
+        );
+
+        // Log before saving
+        console.log('saving exercise', updatedMarkdown);
+        console.log('draft answers:', exerciseDraftAnswers);
+        console.log('original markdown:', exercise.markdown);
+
+        // Save to database
+        const { updateExercise } = await import('../../services/worksheets');
+        await updateExercise(worksheet.id, exercise.id, {
+          markdown: updatedMarkdown,
+        });
+      } catch (err) {
+        console.error('Failed to auto-save exercise:', err);
+        // Don't block user - just log error
+      }
+    }
+  };
+
+  // Handler for exercise focus - just track which exercise is focused
+  const handleExerciseFocus = (exerciseId: string) => {
+    setCurrentFocusedExerciseId(exerciseId);
   };
 
   const handleSubmit = async () => {
@@ -518,15 +652,19 @@ const WorksheetScreen: React.FC = () => {
         const topic = topicsMap.get(assignment.topicId);
         if (!topic || !topic.prompt) continue;
 
+        // Capture current values for the callback
+        const capturedExerciseIndex = currentExerciseIndex;
+        const capturedExerciseOrder = exerciseOrder;
+
         try {
           // Generate exercises using the orchestrator (handles both FILL_GAPS and DICTATION)
           const generatedExercises = await generateExerciseForTopic(
             topic,
             assignment.count,
             (current, total) => {
-              // Update progress: currentExerciseIndex + current exercises completed for this topic
+              // Update progress: capturedExerciseIndex + current exercises completed for this topic
               setRegenerationProgress({
-                current: currentExerciseIndex + current,
+                current: capturedExerciseIndex + current,
                 total: totalExercises,
               });
             }
@@ -536,12 +674,13 @@ const WorksheetScreen: React.FC = () => {
           generatedExercises.forEach((exercise) => {
             exercises.push({
               ...exercise,
-              order: exerciseOrder++,
+              order: capturedExerciseOrder + exercises.length,
             });
           });
           
           // Update current exercise index after completing this topic
           currentExerciseIndex += assignment.count;
+          exerciseOrder = exercises.length;
         } catch (error: any) {
           console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
           const errorMessage = error.message || t('error.unknownError');
@@ -737,6 +876,8 @@ const WorksheetScreen: React.FC = () => {
                     isExerciseMarkedAsError={isExerciseMarkedAsError}
                     hasError={exerciseErrors[0] || false}
                     onMarkError={() => handleMarkError(exercise.id)}
+                    onExerciseFocus={() => handleExerciseFocus(exercise.id)}
+                    onExerciseBlur={() => handleExerciseBlur(exercise.id, exerciseAnswerStart)}
                   />
                 );
               } else {
@@ -754,6 +895,9 @@ const WorksheetScreen: React.FC = () => {
                     isReviewMode={isReviewMode}
                     isExerciseMarkedAsError={isExerciseMarkedAsError}
                     onMarkError={() => handleMarkError(exercise.id)}
+                    onExerciseFocus={() => handleExerciseFocus(exercise.id)}
+                    onExerciseBlur={() => handleExerciseBlur(exercise.id, exerciseAnswerStart)}
+                    isCompleted={isCompleted}
                   />
                 );
               }

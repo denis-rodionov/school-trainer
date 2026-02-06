@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -21,11 +21,7 @@ const StudentsScreen: React.FC = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadStudents();
-  }, []);
-
-  const loadStudents = async () => {
+  const loadStudents = useCallback(async () => {
     try {
       setLoading(true);
       const allStudents = await getStudents();
@@ -35,7 +31,11 @@ const StudentsScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    loadStudents();
+  }, [loadStudents]);
 
   const handleStudentClick = (studentId: string) => {
     navigate(`/students/${studentId}`);

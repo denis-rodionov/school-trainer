@@ -128,15 +128,19 @@ const Assignments: React.FC<AssignmentsProps> = ({
         const topic = topics.get(assignment.topicId);
         if (!topic || !topic.prompt) continue;
 
+        // Capture current values for the callback
+        const capturedExerciseIndex = currentExerciseIndex;
+        const capturedExerciseOrder = exerciseOrder;
+
         try {
           // Generate exercises using the orchestrator (handles both FILL_GAPS and DICTATION)
           const generatedExercises = await generateExerciseForTopic(
             topic,
             assignment.count,
             (current, total) => {
-              // Update progress: currentExerciseIndex + current exercises completed for this topic
+              // Update progress: capturedExerciseIndex + current exercises completed for this topic
               setGenerationProgress({
-                current: currentExerciseIndex + current,
+                current: capturedExerciseIndex + current,
                 total: totalExercises,
               });
             }
@@ -146,12 +150,13 @@ const Assignments: React.FC<AssignmentsProps> = ({
           generatedExercises.forEach((exercise) => {
             exercises.push({
               ...exercise,
-              order: exerciseOrder++,
+              order: capturedExerciseOrder + exercises.length,
             });
           });
           
           // Update current exercise index after completing this topic
           currentExerciseIndex += assignment.count;
+          exerciseOrder = exercises.length;
         } catch (error: any) {
           console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
           

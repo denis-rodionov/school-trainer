@@ -1,4 +1,4 @@
-import { formatDistanceToNow, format, isToday, isYesterday, differenceInDays } from 'date-fns';
+import { isToday, isYesterday, differenceInDays } from 'date-fns';
 
 /**
  * Format date for display (today, yesterday, 3 days ago, month ago, etc.)

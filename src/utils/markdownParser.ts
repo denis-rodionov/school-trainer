@@ -189,11 +189,120 @@ export const extractGaps = (markdown: string): string[] => {
   
   // Count <input> tags with data-answer attribute
   const inputPattern = /<input[^>]*data-answer="[^"]*"[^>]*>/gi;
-  let match;
+  const matches = markdown.match(inputPattern);
   
-  while ((match = inputPattern.exec(markdown)) !== null) {
-    gaps.push('');
+  if (matches) {
+    matches.forEach(() => gaps.push(''));
   }
 
   return gaps;
+};
+
+/**
+ * Extract draft answers from HTML markdown with <input> or <textarea> tags
+ * For <input>: extracts value attribute
+ * For <textarea>: extracts content between tags
+ * Returns array of draft answers in the same order as extractCorrectAnswers
+ */
+export const extractDraftAnswers = (markdown: string): string[] => {
+  const answers: string[] = [];
+  const text = markdown ?? '';
+  
+  // Match <input> tags with data-answer attribute (value attribute can be anywhere in the tag)
+  const inputPattern = /<input[^>]*data-answer="[^"]*"[^>]*>/gi;
+  let match;
+  
+  while ((match = inputPattern.exec(text)) !== null) {
+    const fullTag = match[0];
+    // Extract value attribute from the full tag (value can appear anywhere)
+    const valueMatch = fullTag.match(/value="([^"]*)"/i);
+    const draftValue = valueMatch ? valueMatch[1] : '';
+    // Unescape HTML entities
+    const answer = draftValue
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    answers.push(answer);
+  }
+
+  // Match <textarea> tags - extract content between tags
+  const textareaPattern = /<textarea[^>]*data-answer="[^"]*"[^>]*>(.*?)<\/textarea>/gi;
+  while ((match = textareaPattern.exec(text)) !== null) {
+    const draftContent = match[1] || '';
+    // Unescape HTML entities and convert <br> to newlines
+    const answer = draftContent
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    answers.push(answer);
+  }
+
+  return answers;
+};
+
+/**
+ * Update markdown with draft answers by adding/updating value attributes or textarea content
+ * For <input>: adds/updates value attribute
+ * For <textarea>: updates content between tags
+ */
+export const updateMarkdownWithDraftAnswers = (
+  markdown: string,
+  draftAnswers: string[]
+): string => {
+  let result = markdown;
+  let answerIndex = 0;
+
+  // Update <input> tags with value attributes
+  const inputPattern = /<input([^>]*data-answer="[^"]*"[^>]*)>/gi;
+  result = result.replace(inputPattern, (match) => {
+    const draftAnswer = draftAnswers[answerIndex] || '';
+    answerIndex++;
+    
+    // Remove existing value attribute if present (value can be anywhere in the tag)
+    let cleanedTag = match.replace(/\s+value="[^"]*"/gi, '');
+    
+    // Escape HTML entities
+    const escapedAnswer = draftAnswer
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    
+    // Add value attribute if draft answer is not empty
+    if (draftAnswer.trim()) {
+      // Insert value before the closing >
+      return cleanedTag.replace(/>$/, ` value="${escapedAnswer}">`);
+    } else {
+      return cleanedTag;
+    }
+  });
+
+  // Reset answerIndex for textarea processing
+  answerIndex = 0;
+
+  // Update <textarea> tags with content between tags
+  const textareaPattern = /<textarea([^>]*data-answer="[^"]*")([^>]*)>(.*?)<\/textarea>/gi;
+  result = result.replace(textareaPattern, (match, beforeDataAnswer, afterDataAnswer, oldContent) => {
+    const draftAnswer = draftAnswers[answerIndex] || '';
+    answerIndex++;
+    
+    // Escape HTML entities and convert newlines to <br>
+    const escapedAnswer = draftAnswer
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/\n/g, '<br>');
+    
+    return `<textarea${beforeDataAnswer}${afterDataAnswer}>${escapedAnswer}</textarea>`;
+  });
+
+  return result;
 };

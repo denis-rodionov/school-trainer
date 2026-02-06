@@ -5,7 +5,6 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import AppLayout from './components/Layout/AppLayout';
-import Navigation from './components/Layout/Navigation';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import StudentDashboard from './components/Student/StudentDashboard';

@@ -113,7 +113,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     if (subject) {
       setSubjectInputValue(translateSubject(subject, language));
     }
-  }, [language]);
+  }, [language, subject]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};

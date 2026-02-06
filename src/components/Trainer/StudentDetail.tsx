@@ -16,7 +16,6 @@ import { User, SubjectData, Worksheet, Subject } from '../../types';
 import Assignments from '../Student/Assignments';
 import RecentWorksheets from '../Student/RecentWorksheets';
 import AssignTopicsDialog from './AssignTopicsDialog';
-import { getTopics } from '../../services/topics';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
 

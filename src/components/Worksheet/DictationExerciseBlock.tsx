@@ -24,6 +24,8 @@ interface DictationExerciseBlockProps {
   isExerciseMarkedAsError?: boolean;
   hasError?: boolean; // For student errors (from errors array)
   onMarkError?: () => void;
+  onExerciseFocus?: () => void;
+  onExerciseBlur?: () => void;
 }
 
 const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
@@ -36,6 +38,8 @@ const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
   isExerciseMarkedAsError = false,
   hasError = false,
   onMarkError,
+  onExerciseFocus,
+  onExerciseBlur,
 }) => {
   const { t } = useLanguage();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -47,6 +51,10 @@ const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
 
   const audioUrl = exercise.audioUrl || extractAudioUrl(markdown);
   const correctAnswer = extractDictationAnswer(markdown);
+  
+  // For trainer view: check if answer is correct
+  const isCorrect = showCorrectAnswer && answer.trim() && 
+    answer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
   // Use a real <audio> in the DOM so we can seek and show progress
   useEffect(() => {
@@ -86,7 +94,7 @@ const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
       el.src = '';
       audioRef.current = null;
     };
-  }, [audioUrl]);
+  }, [audioUrl, isSeeking]);
 
   const handlePlayPause = () => {
     const el = audioRef.current;
@@ -197,19 +205,50 @@ const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
           rows={5}
           value={answer || ''}
           onChange={(e) => onAnswerChange(e.target.value)}
+          onFocus={() => {
+            // Track which exercise is focused
+            if (onExerciseFocus) {
+              onExerciseFocus();
+            }
+          }}
+          onBlur={() => {
+            // Save exercise when leaving it
+            if (onExerciseBlur) {
+              onExerciseBlur();
+            }
+          }}
           disabled={isReadOnly}
           error={isExerciseMarkedAsError || hasError}
           placeholder={t('exercise.dictation.placeholder')}
           fullWidth
           sx={{
             '& .MuiInputBase-input': {
-              backgroundColor: isReadOnly
-                ? '#f5f5f5'
+              // For trainers: prioritize color coding (correct/incorrect) over read-only gray
+              backgroundColor: showCorrectAnswer && answer.trim()
+                ? (isCorrect ? '#e8f5e9' : '#ffebee') // Green for correct, red for incorrect
                 : (isExerciseMarkedAsError || hasError)
-                ? '#ffebee'
-                : 'white',
+                ? '#ffebee' // Red for errors
+                : isReadOnly
+                ? '#f5f5f5' // Gray for read-only (when not trainer view)
+                : 'white', // White for editable
               fontSize: '16px',
             },
+            ...(showCorrectAnswer && isCorrect && {
+              '& .MuiOutlinedInput-root': {
+                borderColor: 'success.main',
+                '&:hover': {
+                  borderColor: 'success.dark',
+                },
+              },
+            }),
+            ...(showCorrectAnswer && answer.trim() && !isCorrect && {
+              '& .MuiOutlinedInput-root': {
+                borderColor: 'error.main',
+                '&:hover': {
+                  borderColor: 'error.dark',
+                },
+              },
+            }),
           }}
         />
 

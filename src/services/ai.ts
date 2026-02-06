@@ -78,12 +78,6 @@ export const generateExercise = async (
   const timestamp = Date.now();
   const randomVariation = Math.floor(Math.random() * 100);
   
-  // Generate random number ranges to encourage variety
-  // Use the random seed to create different "preferred ranges" for each exercise
-  const rangeStart = (randomSeed % 50) + 1; // 1-50
-  const rangeEnd = rangeStart + 20 + (randomVariation % 30); // Range of 20-50 numbers
-  const preferredRange = `${rangeStart}-${rangeEnd}`;
-  
   // Create a "number selection strategy" based on exercise number and seed
   const strategies = [
     'Use numbers from different ranges - mix small, medium, and large numbers',

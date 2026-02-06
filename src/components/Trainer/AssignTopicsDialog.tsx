@@ -84,7 +84,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
     };
 
     loadData();
-  }, [open, studentId]);
+  }, [open, studentId, t]);
 
   // Filter topics based on subject and search text
   useEffect(() => {
