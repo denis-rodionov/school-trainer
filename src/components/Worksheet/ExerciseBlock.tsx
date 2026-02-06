@@ -5,6 +5,13 @@ import { Exercise } from '../../types';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 import { useLanguage } from '../../contexts/LanguageContext';
 
+/** Returns true if the answer looks like a number (so we show number keyboard on mobile). */
+function isNumericAnswer(answer: string): boolean {
+  const trimmed = (answer ?? '').trim();
+  if (!trimmed) return false;
+  return /^-?\d*\.?\d+$/.test(trimmed);
+}
+
 interface ExerciseBlockProps {
   exercise: Exercise;
   answers: string[];
@@ -60,9 +67,11 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
             const hasError = errors[currentAnswerIndex];
             const correctAnswer = correctAnswers[currentAnswerIndex] || part.correctAnswer || '';
 
+            const isNumeric = isNumericAnswer(correctAnswer);
             return (
               <TextField
                 key={`gap-${partIndex}`}
+                type={isNumeric ? 'number' : 'text'}
                 value={answers[currentAnswerIndex] || ''}
                 onChange={(e) => onAnswerChange(currentAnswerIndex, e.target.value)}
                 disabled={isReadOnly}
@@ -81,6 +90,7 @@ const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 }}
                 inputProps={{
                   'data-answer': correctAnswer,
+                  inputMode: isNumeric ? 'decimal' : 'text',
                 }}
                 helperText={
                   showCorrectAnswers && correctAnswer
