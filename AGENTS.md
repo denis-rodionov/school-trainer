@@ -166,7 +166,7 @@ src/
     markdownParser.test.ts     ← co-located unit tests
   test/
     fixtures.ts                ← sample Topic, Exercise, markdown strings
-    setupMocks.ts              ← Firebase/auth/service mocks in setupTests.ts
+    setupTests.ts              ← global Firebase/auth/service mocks (auto-loaded by Jest)
     renderWithProviders.tsx    ← MemoryRouter + LanguageProvider wrapper
 ```
 

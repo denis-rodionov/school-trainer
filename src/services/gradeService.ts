@@ -13,6 +13,7 @@ import { differenceInDays, isToday } from 'date-fns';
 import { getCompletedWorksheetsBySubject } from './worksheets';
 import { updateSubjectGrade } from './users';
 import { isWithinLastDays } from '../utils/dateUtils';
+import { computeGrade } from '../utils/gradeCalculator';
 import { Subject } from '../types';
 
 /**
@@ -58,21 +59,9 @@ export const calculateGrade = async (
     return isWithinLastDays(w.completedAt, 7);
   });
   const countLast7Days = last7Days.length;
-  
-  // Rule 1: "Just began" - less than 6 total completed
-  if (completedWorksheets.length < 6) {
-    // Grade based on days since last completion
-    const daysSinceLast = differenceInDays(new Date(), mostRecentDate);
-    // 0 days → 1, 1 day → 2, 2 days → 3, 3 → 4, 4 → 5, 5+ days → 6
-    return Math.min(6, Math.max(1, 1 + daysSinceLast));
-  }
-  
-  // Rule 2: 6+ total completed - grade based on count in last 7 days
-  // 6 worksheets in last 7 days → grade 1
-  // 0 worksheets in last 7 days → grade 6
-  // Linear interpolation: grade = 7 - countLast7Days, clamped to 1-6
-  const grade = Math.min(6, Math.max(1, 7 - countLast7Days));
-  return grade;
+  const daysSinceLast = differenceInDays(new Date(), mostRecentDate);
+
+  return computeGrade(completedWorksheets.length, countLast7Days, daysSinceLast);
 };
 
 /**

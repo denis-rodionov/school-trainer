@@ -106,6 +106,42 @@ npm start
 
 The app will open at `http://localhost:3000`
 
+### Running Tests
+
+Tests use **Jest** and **React Testing Library** (included with Create React App). They run entirely locally — no Firebase project or Gemini API key required.
+
+If you see `react-scripts: command not found`, install dependencies first:
+
+```bash
+npm install
+```
+
+Then run tests:
+
+```bash
+# Run all tests once and exit (best before deploy or in CI)
+npm run test:ci
+
+# Interactive watch mode — press "a" to run all, "q" to quit
+npm test
+
+# Run all tests with a coverage report (output in coverage/)
+npm run test:coverage
+
+# Run a single test file
+npm test -- markdownParser.test.ts
+```
+
+Equivalent one-shot command without the npm script:
+
+```bash
+CI=true npm test
+```
+
+**What is covered:** parsing and scoring logic (`src/utils/`), grade and worksheet score rules, AI markdown conversion (mocked HTTP), exercise generator routing, print HTML, fill-gap exercise UI, and auth/role redirects. See `AGENTS.md` → Testing for the full map and guidance on adding tests for new features.
+
+**When to run:** after changing parsing, scoring, grades, exercise generation, or auth routing — at minimum run `npm run test:ci` before `npm run build` and deploy.
+
 ### Firebase Emulators (Optional)
 
 For local development with Firebase emulators:
@@ -209,8 +245,9 @@ school-trainer/
 │   ├── contexts/          # React contexts (Auth)
 │   ├── services/          # Firebase service functions
 │   ├── scripts/           # Utility scripts (seed data)
+│   ├── test/              # Shared test helpers (fixtures, mocks)
 │   ├── types/             # TypeScript type definitions
-│   └── utils/              # Utility functions
+│   └── utils/             # Utility functions (+ co-located *.test.ts)
 ├── firebase.json           # Firebase configuration
 ├── firestore.rules         # Firestore security rules
 └── .env.local             # Environment variables (gitignored)
@@ -262,9 +299,10 @@ Firestore security rules are defined in `firestore.rules`:
 
 1. Make code changes
 2. Test locally: `npm start`
-3. Build: `npm run build`
-4. Test build locally (optional): `npx serve -s build`
-5. Deploy: `firebase deploy`
+3. Run automated tests: `npm run test:ci`
+4. Build: `npm run build`
+5. Test build locally (optional): `npx serve -s build`
+6. Deploy: `firebase deploy`
 
 ## Future Enhancements
 

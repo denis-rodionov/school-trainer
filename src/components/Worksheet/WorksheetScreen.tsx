@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -32,11 +32,14 @@ import DictationExerciseBlock from './DictationExerciseBlock';
 import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl, extractDraftAnswers, updateMarkdownWithDraftAnswers } from '../../utils/markdownParser';
 import { extractDictationAnswer } from '../../utils/dictationParser';
 import { fuzzyMatchText } from '../../utils/dictationScoring';
+import { computeWorksheetScore } from '../../utils/worksheetScoring';
 import {
   getSubjectData,
 } from '../../services/users';
 import { generateExerciseForTopic } from '../../services/exerciseGenerator';
 import { printWorksheet } from '../../services/printing';
+import { firestoreRead } from '../../utils/firestoreResilience';
+import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
 
 const WorksheetScreen: React.FC = () => {
   const { worksheetId } = useParams<{ worksheetId: string }>();
@@ -79,118 +82,107 @@ const WorksheetScreen: React.FC = () => {
     return /<textarea[^>]*data-answer=["']/i.test(md);
   };
 
+  const loadWorksheet = useCallback(async () => {
+    if (!worksheetId) return;
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const [worksheetData, exercisesData] = await firestoreRead(() =>
+        Promise.all([getWorksheet(worksheetId), getExercises(worksheetId)])
+      );
+
+      if (!worksheetData) {
+        setShouldGoToDashboard(true);
+        navigate('/dashboard');
+        return;
+      }
+
+      if (isTrainer && worksheetData.studentId !== currentUser?.uid) {
+        // Trainer viewing student's worksheet - allowed
+      } else if (!isTrainer && worksheetData.studentId !== currentUser?.uid) {
+        setError(t('error.noPermission'));
+        return;
+      }
+
+      setWorksheet(worksheetData);
+      const sortedExercises = exercisesData.sort((a, b) => a.order - b.order);
+      setExercises(sortedExercises);
+
+      const topics: Record<string, any> = {};
+      for (const exercise of sortedExercises) {
+        if (!topics[exercise.topicId]) {
+          const topic = await firestoreRead(() => getTopic(exercise.topicId));
+          if (topic) {
+            topics[exercise.topicId] = topic;
+          }
+        }
+      }
+      setTopicsMap(topics);
+
+      const totalGaps = sortedExercises.reduce((sum, ex) => {
+        if (isDictationExercise(ex)) {
+          return sum + 1;
+        }
+        const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
+        return sum + correctAnswers.length;
+      }, 0);
+
+      setAttempts(new Array(sortedExercises.length).fill(1));
+      setPreviousAnswers(new Array(sortedExercises.length).fill([]).map(() => []));
+      setMistakeCount(null);
+      setExercisesWithMistakesIds(new Set());
+
+      const initialAnswers = new Array(totalGaps).fill('');
+      let answerSlot = 0;
+      for (const ex of sortedExercises) {
+        if (isDictationExercise(ex)) {
+          const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
+          if (draftAnswers.length > 0 && draftAnswers[0]) {
+            initialAnswers[answerSlot] = draftAnswers[0];
+          } else if (ex.userInput != null && ex.userInput !== '') {
+            initialAnswers[answerSlot] = ex.userInput;
+          }
+          answerSlot += 1;
+        } else {
+          const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
+          const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
+          for (let i = 0; i < correctAnswers.length; i++) {
+            if (draftAnswers[i]) {
+              initialAnswers[answerSlot + i] = draftAnswers[i];
+            }
+          }
+          answerSlot += correctAnswers.length;
+        }
+      }
+      setAnswers(initialAnswers);
+      answersRef.current = initialAnswers;
+    } catch (err: any) {
+      setError(err.message || t('error.connectionLost'));
+    } finally {
+      setLoading(false);
+      isLoadingRef.current = false;
+    }
+  }, [worksheetId, currentUser, isTrainer, navigate, t]);
+
   useEffect(() => {
     if (!worksheetId) return;
-    
-    // Prevent duplicate loads
     if (isLoadingRef.current) return;
     isLoadingRef.current = true;
+    void loadWorksheet();
 
-    const loadWorksheet = async () => {
-      try {
-        setLoading(true);
-        const [worksheetData, exercisesData] = await Promise.all([
-          getWorksheet(worksheetId),
-          getExercises(worksheetId),
-        ]);
-
-        if (!worksheetData) {
-          // Worksheet not found (might have been deleted/regenerated)
-          // Redirect to dashboard instead of showing error
-          setShouldGoToDashboard(true);
-          navigate('/dashboard');
-          return;
-        }
-
-        // Check if trainer can view this worksheet
-        if (isTrainer && worksheetData.studentId !== currentUser?.uid) {
-          // Trainer viewing student's worksheet - this is allowed
-        } else if (!isTrainer && worksheetData.studentId !== currentUser?.uid) {
-          setError(t('error.noPermission'));
-          return;
-        }
-
-        setWorksheet(worksheetData);
-        const sortedExercises = exercisesData.sort((a, b) => a.order - b.order);
-        setExercises(sortedExercises);
-
-        // Load topics
-        const topics: Record<string, any> = {};
-        for (const exercise of sortedExercises) {
-          if (!topics[exercise.topicId]) {
-            const topic = await getTopic(exercise.topicId);
-            if (topic) {
-              topics[exercise.topicId] = topic;
-            }
-          }
-        }
-        setTopicsMap(topics);
-
-        // Initialize answers - calculate total number of gaps/answers needed
-        // For FILL_GAPS: count gaps, for DICTATION: count as 1 answer per exercise
-        const totalGaps = sortedExercises.reduce((sum, ex) => {
-          if (isDictationExercise(ex)) {
-            return sum + 1; // Dictation exercises have 1 answer (the full text)
-          } else {
-            const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
-            return sum + correctAnswers.length;
-          }
-        }, 0);
-        
-        // Initialize attempts (1 for each exercise, will be incremented on wrong answers)
-        setAttempts(new Array(sortedExercises.length).fill(1));
-        // Initialize previous answers (empty arrays for each exercise)
-        setPreviousAnswers(new Array(sortedExercises.length).fill([]).map(() => []));
-        // Reset mistake count and exercises with mistakes when loading a new worksheet
-        setMistakeCount(null);
-        setExercisesWithMistakesIds(new Set());
-
-        // Build initial answers (empty, then fill from draft answers in markdown, then from exercise.userInput for completed/pending so trainer sees student answer)
-        const initialAnswers = new Array(totalGaps).fill('');
-        let answerSlot = 0;
-        for (const ex of sortedExercises) {
-          if (isDictationExercise(ex)) {
-            // First try to load from draft answers in markdown
-            const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
-            if (draftAnswers.length > 0 && draftAnswers[0]) {
-              initialAnswers[answerSlot] = draftAnswers[0];
-            } else if (ex.userInput != null && ex.userInput !== '') {
-              // Fallback to userInput for completed worksheets
-              initialAnswers[answerSlot] = ex.userInput;
-            }
-            answerSlot += 1;
-          } else {
-            // Extract draft answers from markdown
-            const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
-            const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
-            console.log('Loading exercise markdown:', ex.markdown);
-            console.log('Extracted draft answers:', draftAnswers);
-            console.log('Correct answers count:', correctAnswers.length);
-            for (let i = 0; i < correctAnswers.length; i++) {
-              if (draftAnswers[i]) {
-                initialAnswers[answerSlot + i] = draftAnswers[i];
-              }
-            }
-            answerSlot += correctAnswers.length;
-          }
-        }
-        setAnswers(initialAnswers);
-        answersRef.current = initialAnswers; // Update ref
-      } catch (err: any) {
-        setError(err.message || t('error.failedToLoadWorksheet'));
-      } finally {
-        setLoading(false);
-        isLoadingRef.current = false;
-      }
-    };
-
-    loadWorksheet();
-    
-    // Reset loading flag when dependencies change
     return () => {
       isLoadingRef.current = false;
     };
-  }, [worksheetId, currentUser, isTrainer, navigate, t]);
+  }, [worksheetId, loadWorksheet]);
+
+  useOnFirestoreRecovery(() => {
+    if (!loading && worksheetId) {
+      isLoadingRef.current = false;
+      void loadWorksheet();
+    }
+  });
 
   // Save current exercise on unmount
   useEffect(() => {
@@ -424,7 +416,7 @@ const WorksheetScreen: React.FC = () => {
       const totalExercises = exercises.length;
       const errorCount = mistakeCount;
       const correctCount = totalExercises - errorCount;
-      const score = totalExercises > 0 ? (correctCount / totalExercises) * 100 : 100;
+      const score = computeWorksheetScore(correctCount, totalExercises);
 
       // Update exercises with attempt and userInput
       // Use the exercisesWithMistakesIds from the first submit (doesn't change)
@@ -542,7 +534,7 @@ const WorksheetScreen: React.FC = () => {
       // Calculate score: (totalExercises - errors) / totalExercises * 100
       const errorCount = trainerMarkedErrors.size;
       const correctCount = totalExercises - errorCount;
-      const score = totalExercises > 0 ? (correctCount / totalExercises) * 100 : 100;
+      const score = computeWorksheetScore(correctCount, totalExercises);
 
       // Update exercises with attempt and userInput based on trainer's review
       const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
@@ -737,7 +729,17 @@ const WorksheetScreen: React.FC = () => {
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Box display="flex" flexDirection="column" alignItems="center" gap={2} py={4}>
+        <Alert severity="error">{error}</Alert>
+        <Button variant="contained" onClick={() => {
+          isLoadingRef.current = false;
+          void loadWorksheet();
+        }}>
+          {t('common.retry')}
+        </Button>
+      </Box>
+    );
   }
 
   if (!worksheet) {

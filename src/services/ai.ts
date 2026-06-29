@@ -16,6 +16,8 @@
  * 4. Restrict API key to your domain in Google Cloud Console
  */
 
+import { validateAndConvertToHtmlMarkdown } from '../utils/aiMarkdownConverter';
+
 interface GenerateExerciseRequest {
   prompt: string;
   topicName: string;
@@ -353,78 +355,6 @@ ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COM
     throw new Error(`Failed to generate exercise: ${error.message}`);
   }
 };
-
-interface ValidationResult {
-  valid: boolean;
-  htmlMarkdown?: string;
-  error?: string;
-}
-
-/**
- * Validate and convert AI-generated text from ____ (answer) format to HTML markdown with <input> tags
- * Validates that:
- * 1. The text contains at least one gap (____)
- * 2. Every gap has a corresponding answer in parentheses
- * 
- * Example: "4+2=____ (6)" -> "<p>4+2=<input data-answer=\"6\"/></p>"
- * Example: "Calculate: 5 + ____ (3) = 8" -> "<p>Calculate: 5 + <input data-answer=\"3\"/> = 8</p>"
- */
-function validateAndConvertToHtmlMarkdown(text: string): ValidationResult {
-  const trimmedText = text.trim();
-  
-  // Check if text contains any gaps (____)
-  const gapPattern = /____/g;
-  const gapMatches = trimmedText.match(gapPattern);
-  const gapCount = gapMatches ? gapMatches.length : 0;
-  
-  if (gapCount === 0) {
-    return {
-      valid: false,
-      error: `AI generated exercise without any gaps. The exercise should contain "____" to indicate where students fill in answers. Generated text: "${trimmedText.substring(0, 100)}${trimmedText.length > 100 ? '...' : ''}"`,
-    };
-  }
-  
-  // Check if all gaps have answers in parentheses
-  // Pattern: ____ (answer) - matches four underscores followed by optional space and answer in parentheses
-  const patternWithAnswer = /____\s*\(([^)]+)\)/g;
-  const answerMatches = trimmedText.match(patternWithAnswer);
-  const answerCount = answerMatches ? answerMatches.length : 0;
-  
-  if (answerCount < gapCount) {
-    const missingCount = gapCount - answerCount;
-    return {
-      valid: false,
-      error: `AI generated exercise with ${gapCount} gap(s) but only ${answerCount} answer(s) in parentheses. Every gap must be followed by an answer in parentheses like "____ (answer)". Missing ${missingCount} answer(s). Generated text: "${trimmedText.substring(0, 150)}${trimmedText.length > 150 ? '...' : ''}"`,
-    };
-  }
-  
-  // Convert to HTML markdown
-  let result = trimmedText;
-  
-  // Replace all occurrences of ____ (answer) with <input data-answer="answer"/>
-  result = result.replace(patternWithAnswer, (match, answer) => {
-    // Trim the answer and escape HTML special characters
-    const trimmedAnswer = answer.trim();
-    const escapedAnswer = trimmedAnswer
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-    return `<input data-answer="${escapedAnswer}"/>`;
-  });
-  
-  // Wrap the result in <p> tags if it doesn't already start with an HTML tag
-  // Check if it already contains HTML tags at the start
-  if (!result.match(/^<[^>]+>/)) {
-    result = `<p>${result}</p>`;
-  }
-  
-  return {
-    valid: true,
-    htmlMarkdown: result,
-  };
-}
 
 /**
  * Extract correct answers from HTML markdown text

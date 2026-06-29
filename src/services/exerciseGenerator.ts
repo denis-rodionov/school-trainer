@@ -6,6 +6,7 @@
  */
 
 import { Topic, Exercise, TopicType } from '../types';
+import { createDictationMarkdown } from '../utils/dictationParser';
 import { generateExercises } from './ai';
 import { generateDictationText } from './aiDictation';
 import { generateAudioFromText } from './textToSpeech';
@@ -121,29 +122,4 @@ async function generateDictationExercises(
   }
 
   return exercises;
-}
-
-/**
- * Create markdown HTML for dictation exercise
- * Includes audio player and textarea input field
- * 
- * @param correctText - The correct text that should be written
- * @param audioUrl - URL of the audio file
- * @returns HTML markdown string
- */
-function createDictationMarkdown(correctText: string, audioUrl: string): string {
-  // Escape HTML special characters in the correct text
-  const escapedText = correctText
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-  // Create markdown with audio player and textarea
-  // The textarea has data-answer attribute with the correct text for validation
-  return `<div class="dictation-exercise">
-  <audio controls src="${audioUrl}"></audio>
-  <textarea data-answer="${escapedText}" rows="5" cols="50" placeholder="Write what you hear..."></textarea>
-</div>`;
 }

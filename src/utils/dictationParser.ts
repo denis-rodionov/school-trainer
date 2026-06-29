@@ -60,3 +60,20 @@ export const parseDictationMarkdown = (markdown: string): DictationExercise => {
     hasTextarea,
   };
 };
+
+/**
+ * Create markdown HTML for a dictation exercise with audio player and textarea.
+ */
+export function createDictationMarkdown(correctText: string, audioUrl: string): string {
+  const escapedText = correctText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  return `<div class="dictation-exercise">
+  <audio controls src="${audioUrl}"></audio>
+  <textarea data-answer="${escapedText}" rows="5" cols="50" placeholder="Write what you hear..."></textarea>
+</div>`;
+}
