@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -7,12 +7,15 @@ import {
   List,
   ListItem,
   ListItemText,
+  Alert,
+  Button,
 } from '@mui/material';
 import { SubjectData, Subject } from '../../types';
 import { getTopic } from '../../services/topics';
-import { useEffect, useState } from 'react';
 import { Topic } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { firestoreRead } from '../../utils/firestoreResilience';
+import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
 
 interface TopicAssignmentsProps {
   subject: Subject;
@@ -28,40 +31,64 @@ const TopicAssignments: React.FC<TopicAssignmentsProps> = ({
   const { t } = useLanguage();
   const [topics, setTopics] = useState<Map<string, Topic>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadTopics = useCallback(async () => {
+    if (!subjectData || !subjectData.topicAssignments.length) {
+      setLoading(false);
+      setError('');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+      const loadedTopics = await firestoreRead(() =>
+        Promise.all(subjectData.topicAssignments.map((assignment) => getTopic(assignment.topicId)))
+      );
+      const topicMap = new Map<string, Topic>();
+
+      loadedTopics.forEach((topic, index) => {
+        if (topic) {
+          topicMap.set(subjectData.topicAssignments[index].topicId, topic);
+        }
+      });
+
+      setTopics(topicMap);
+    } catch (err: any) {
+      setError(err.message || t('error.connectionLost'));
+    } finally {
+      setLoading(false);
+    }
+  }, [subjectData, t]);
 
   useEffect(() => {
-    const loadTopics = async () => {
-      if (!subjectData || !subjectData.topicAssignments.length) {
-        setLoading(false);
-        return;
-      }
+    void loadTopics();
+  }, [loadTopics]);
 
-      try {
-        const topicPromises = subjectData.topicAssignments.map((assignment) =>
-          getTopic(assignment.topicId)
-        );
-        const loadedTopics = await Promise.all(topicPromises);
-        const topicMap = new Map<string, Topic>();
-        
-        loadedTopics.forEach((topic, index) => {
-          if (topic) {
-            topicMap.set(subjectData.topicAssignments[index].topicId, topic);
-          }
-        });
-        
-        setTopics(topicMap);
-      } catch (err) {
-        console.error('Failed to load topics:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTopics();
-  }, [subjectData]);
+  useOnFirestoreRecovery(() => {
+    if (!loading && subjectData?.topicAssignments?.length) {
+      void loadTopics();
+    }
+  });
 
   if (loading) {
     return <Typography variant="body2">{t('common.loading')}</Typography>;
+  }
+
+  if (error) {
+    return (
+      <Alert
+        severity="error"
+        action={
+          <Button color="inherit" size="small" onClick={() => void loadTopics()}>
+            {t('common.retry')}
+          </Button>
+        }
+      >
+        {error}
+      </Alert>
+    );
   }
 
   if (!subjectData || !subjectData.topicAssignments.length) {

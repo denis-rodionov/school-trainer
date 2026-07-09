@@ -13,6 +13,7 @@ describe('ProtectedRoute', () => {
       loading: false,
       authError: null,
       refreshUserData: jest.fn(),
+      retryAuthBoot: jest.fn(),
     });
   });
 
@@ -29,6 +30,7 @@ describe('ProtectedRoute', () => {
       loading: false,
       authError: null,
       refreshUserData: jest.fn(),
+      retryAuthBoot: jest.fn(),
     });
     window.history.pushState({}, '', '/dashboard');
     render(<App />);
@@ -42,6 +44,7 @@ describe('ProtectedRoute', () => {
       loading: false,
       authError: null,
       refreshUserData: jest.fn(),
+      retryAuthBoot: jest.fn(),
     });
     window.history.pushState({}, '', '/topics');
     render(<App />);

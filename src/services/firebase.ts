@@ -1,6 +1,11 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getAuth,
+  initializeAuth,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+} from 'firebase/auth';
+import { initializeFirestore, memoryLocalCache } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -11,11 +16,24 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+function createAuth() {
+  try {
+    return initializeAuth(app, {
+      persistence: browserLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch {
+    // Hot reload: Auth already initialized for this app instance
+    return getAuth(app);
+  }
+}
+
+export const auth = createAuth();
+export const db = initializeFirestore(app, {
+  localCache: memoryLocalCache(),
+  experimentalAutoDetectLongPolling: true,
+});
 
 export default app;

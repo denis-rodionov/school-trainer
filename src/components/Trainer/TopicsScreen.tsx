@@ -18,6 +18,8 @@ import { Topic } from '../../types';
 import TopicForm from './TopicForm';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
+import { firestoreRead } from '../../utils/firestoreResilience';
+import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
 
 const TopicsScreen: React.FC = () => {
   const { t, language } = useLanguage();
@@ -30,10 +32,11 @@ const TopicsScreen: React.FC = () => {
   const loadTopics = useCallback(async () => {
     try {
       setLoading(true);
-      const allTopics = await getTopics();
+      setError('');
+      const allTopics = await firestoreRead(() => getTopics());
       setTopics(allTopics);
     } catch (err: any) {
-      setError(err.message || t('error.failedToLoadTopics'));
+      setError(err.message || t('error.connectionLost'));
     } finally {
       setLoading(false);
     }
@@ -42,6 +45,12 @@ const TopicsScreen: React.FC = () => {
   useEffect(() => {
     loadTopics();
   }, [loadTopics]);
+
+  useOnFirestoreRecovery(() => {
+    if (!loading) {
+      void loadTopics();
+    }
+  });
 
   const handleCreate = () => {
     setEditingTopic(null);
@@ -103,7 +112,19 @@ const TopicsScreen: React.FC = () => {
         </Button>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => void loadTopics()}>
+              {t('common.retry')}
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
 
       {subjectNames.length === 0 ? (
         <Alert severity="info" sx={{ mt: 3 }}>

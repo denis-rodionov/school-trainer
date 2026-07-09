@@ -2,8 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Box, Typography, CircularProgress, Alert, Button } from '@mui/material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { LanguageProvider } from './contexts/LanguageContext';
+import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import AppLayout from './components/Layout/AppLayout';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
@@ -24,44 +25,68 @@ const theme = createTheme({
   },
 });
 
+const AuthLoadingState: React.FC = () => {
+  const { loading, authError, retryAuthBoot } = useAuth();
+  const { t } = useLanguage();
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (authError) {
+    return (
+      <Box
+        display="flex"
+        flexDirection="column"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="100vh"
+        gap={2}
+        px={2}
+      >
+        <Alert severity="error" sx={{ maxWidth: 480, width: '100%' }}>
+          {t(authError)}
+        </Alert>
+        <Button variant="contained" onClick={retryAuthBoot}>
+          {t('common.retry')}
+        </Button>
+      </Box>
+    );
+  }
+
+  return null;
+};
+
 const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   allowedRoles?: ('student' | 'trainer')[];
 }> = ({ children, allowedRoles }) => {
-  const { currentUser, userData, loading } = useAuth();
-  
-  console.log('ProtectedRoute check', { 
-    loading, 
-    hasCurrentUser: !!currentUser, 
-    hasUserData: !!userData, 
-    role: userData?.role, 
-    allowedRoles 
-  });
+  const { currentUser, userData, loading, authError } = useAuth();
 
-  if (loading) {
-    console.log('ProtectedRoute: Still loading');
-    return <div>Loading...</div>;
+  if (loading || authError) {
+    return <AuthLoadingState />;
   }
 
   if (!currentUser || !userData) {
-    console.log('ProtectedRoute: No user, redirecting to login');
     return <Navigate to="/login" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(userData.role)) {
-    console.log('ProtectedRoute: Role not allowed, redirecting');
     return <Navigate to="/" replace />;
   }
 
-  console.log('ProtectedRoute: Allowing access');
   return <>{children}</>;
 };
 
 const AppRoutes: React.FC = () => {
-  const { currentUser, userData, loading } = useAuth();
+  const { currentUser, userData, loading, authError } = useAuth();
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (loading || authError) {
+    return <AuthLoadingState />;
   }
 
   return (
