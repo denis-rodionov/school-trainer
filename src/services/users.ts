@@ -10,7 +10,35 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { User, SubjectData, Subject, SubjectStatistics, TopicAssignment, Language } from '../types';
+import {
+  User,
+  SubjectData,
+  Subject,
+  SubjectStatistics,
+  SubjectGutscheins,
+  TopicAssignment,
+  Language,
+} from '../types';
+import { gutscheinsForFirestore } from '../utils/gutscheinCalculator';
+
+export const DEFAULT_GUTSCHEINS: SubjectGutscheins = {
+  balance: 0,
+  defaultWeekly: 0,
+};
+
+export function normalizeGutscheins(gutscheins: SubjectGutscheins | undefined): SubjectGutscheins {
+  if (!gutscheins) {
+    return { ...DEFAULT_GUTSCHEINS };
+  }
+  const result: SubjectGutscheins = {
+    balance: typeof gutscheins.balance === 'number' ? gutscheins.balance : 0,
+    defaultWeekly: typeof gutscheins.defaultWeekly === 'number' ? gutscheins.defaultWeekly : 0,
+  };
+  if (gutscheins.lastWeeklyRefillWeek !== undefined) {
+    result.lastWeeklyRefillWeek = gutscheins.lastWeeklyRefillWeek;
+  }
+  return result;
+}
 
 export const getUsers = async (): Promise<User[]> => {
   const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -45,6 +73,7 @@ export const getSubjectData = async (uid: string, subject: Subject): Promise<Sub
       statistics: data.statistics || {
         worksheetsLast7Days: 0,
       },
+      gutscheins: normalizeGutscheins(data.gutscheins),
     } as SubjectData;
   } catch (error) {
     console.error(`Error loading subject data for ${subject}:`, error);
@@ -85,6 +114,36 @@ export const updateSubjectGrade = async (
     gradeUpdatedDate,
   };
   await updateDoc(subjectRef, { statistics: updatedStatistics });
+};
+
+export const updateSubjectGutscheins = async (
+  uid: string,
+  subject: Subject,
+  gutscheins: SubjectGutscheins
+): Promise<void> => {
+  const subjectRef = doc(db, 'users', uid, 'subjects', subject);
+  await updateDoc(subjectRef, { gutscheins: gutscheinsForFirestore(normalizeGutscheins(gutscheins)) });
+};
+
+export const updateSubjectGradeAndGutscheins = async (
+  uid: string,
+  subject: Subject,
+  grade: number | null,
+  gradeUpdatedDate: Timestamp,
+  gutscheins: SubjectGutscheins
+): Promise<void> => {
+  const subjectRef = doc(db, 'users', uid, 'subjects', subject);
+  const currentDoc = await getDoc(subjectRef);
+  const currentStats = currentDoc.exists() ? (currentDoc.data().statistics || {}) : {};
+  const updatedStatistics = {
+    ...currentStats,
+    grade,
+    gradeUpdatedDate,
+  };
+  await updateDoc(subjectRef, {
+    statistics: updatedStatistics,
+    gutscheins: gutscheinsForFirestore(normalizeGutscheins(gutscheins)),
+  });
 };
 
 export const updateSubjectTopicAssignments = async (

@@ -19,10 +19,17 @@ export interface User {
   createdAt: Timestamp;
 }
 
+export interface SubjectGutscheins {
+  balance: number;
+  defaultWeekly: number;
+  lastWeeklyRefillWeek?: string;
+}
+
 export interface SubjectData {
   subject: Subject;
   topicAssignments: TopicAssignment[];
   statistics: SubjectStatistics;
+  gutscheins?: SubjectGutscheins;
 }
 
 export interface TopicAssignment {

@@ -39,13 +39,15 @@ Two roles (`UserRole`): **student** and **trainer**.
 
 ```
 users/{uid}
-  └── subjects/{subjectName}     # topic assignments + statistics
+  └── subjects/{subjectName}     # topic assignments, statistics, gutscheins
 
 topics/{topicId}                 # exercise templates (trainer-managed)
 
 worksheets/{worksheetId}
   └── exercises/{exerciseId}     # generated exercises for a session
 ```
+
+Each subject document may include `gutscheins`: `{ balance, defaultWeekly, lastWeeklyRefillWeek }`. Gutscheins protect the subject grade when practice lapses — see `docs/GUTSCHEIN.md`.
 
 Security rules are in `firestore.rules` and `storage.rules`. Key constraints:
 
@@ -191,6 +193,8 @@ src/
 | Subject translations | `src/i18n/translations.ts` | `translations.test.ts` |
 | AI `____ (answer)` → `<input>` | `src/utils/aiMarkdownConverter.ts` | `aiMarkdownConverter.test.ts` |
 | Grade scale 1–6 | `src/utils/gradeCalculator.ts` | `gradeCalculator.test.ts` |
+| Gutschein grade protection + weekly refill | `src/utils/gutscheinCalculator.ts` | `gutscheinCalculator.test.ts` |
+| Gutschein refill + bonus passes (service) | `src/services/gutscheinService.ts` | `gutscheinService.test.ts` |
 | Worksheet score % | `src/utils/worksheetScoring.ts` | `worksheetScoring.test.ts` |
 | Grade staleness | `src/services/gradeService.ts` | `gradeService.test.ts` |
 | Topic type routing | `src/services/exerciseGenerator.ts` | `exerciseGenerator.test.ts` |
@@ -206,6 +210,8 @@ src/
 **New exercise type** → add routing in `exerciseGenerator.test.ts` (mock AI/TTS); add parser tests if new markdown shape; add a focused component test under `src/components/Worksheet/`.
 
 **Changed grade or score rules** → update `gradeCalculator.test.ts` or `worksheetScoring.test.ts`. If logic is still embedded in a service/component, extract a pure function to `src/utils/` first.
+
+**Changed Gutschein rules** → update `gutscheinCalculator.test.ts`; document in `docs/GUTSCHEIN.md`.
 
 **Changed AI output format** → update `aiMarkdownConverter.test.ts` and `ai.test.ts` (mocked `fetch` response).
 
@@ -248,6 +254,8 @@ Manually verify role-based routes after auth changes.
 | `docs/README_AI_SETUP.md` | Gemini API setup, quotas, cost details |
 | `docs/DICTATION_SETUP.md` | Dictation + TTS + Storage setup |
 | `docs/DEPLOY_STORAGE_RULES.md` | Firebase Storage CORS and rules |
+| `docs/GUTSCHEIN.md` | Gutschein business logic (grade protection, weekly refill) |
+| `scripts/safari-hang-repro/AGENTS.md` | Manual Playwright scripts to reproduce Safari/WebKit reload hangs |
 
 ## What Not to Do
 

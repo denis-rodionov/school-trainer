@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress, Alert, Tabs, Tab } from '@mui/material';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Box, Typography, CircularProgress, Alert, Tabs, Tab, Button } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
@@ -12,6 +12,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getPendingWorksheetBySubject,
 } from '../../services/worksheets';
+import { firestoreRead } from '../../utils/firestoreResilience';
+import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
 
 // Module-level log to verify file is loaded
 console.log('StudentDashboard module loaded');
@@ -59,6 +61,84 @@ const StudentDashboard: React.FC = () => {
     language 
   });
 
+  const loadData = useCallback(async () => {
+    if (!currentUser || !userData || userData.role !== 'student') return;
+
+    console.log('Loading data for student...');
+    try {
+      setLoading(true);
+      setError('');
+
+      const userSubjects = await firestoreRead(() => getUserSubjects(currentUser.uid));
+      setSubjects(userSubjects);
+
+      if (userSubjects.length === 0) {
+        return;
+      }
+
+      const subjectDataPromises = await firestoreRead(() =>
+        Promise.all(userSubjects.map((subject) => getSubjectData(currentUser.uid, subject)))
+      );
+
+      const worksheetsPromises = await firestoreRead(() =>
+        Promise.all(userSubjects.map((subject) => getRecentWorksheets(currentUser.uid, subject, 10)))
+      );
+
+      const dataMap = new Map<Subject, SubjectData>();
+      const worksheetsMap = new Map<Subject, Worksheet[]>();
+
+      userSubjects.forEach((subject, index) => {
+        const data = subjectDataPromises[index];
+        if (data) {
+          dataMap.set(subject, data);
+        }
+        worksheetsMap.set(subject, worksheetsPromises[index] || []);
+      });
+
+      setSubjectsData(dataMap);
+      setWorksheets(worksheetsMap);
+
+      const { processWeeklyRefillIfNeeded } = await import('../../services/gutscheinService');
+      const refillPromises = userSubjects.map(async (subject) => {
+        const data = dataMap.get(subject);
+        if (data && data.topicAssignments.length > 0) {
+          const refilled = await firestoreRead(() =>
+            processWeeklyRefillIfNeeded(currentUser.uid, subject)
+          );
+          if (refilled) {
+            const updatedData = await firestoreRead(() => getSubjectData(currentUser.uid, subject));
+            if (updatedData) {
+              dataMap.set(subject, updatedData);
+            }
+          }
+        }
+      });
+      await Promise.all(refillPromises);
+
+      const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
+      const gradeUpdatePromises = userSubjects.map(async (subject) => {
+        const data = dataMap.get(subject);
+        if (data && data.topicAssignments.length > 0) {
+          if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
+            await firestoreRead(() => calculateAndUpdateGrade(currentUser.uid, subject));
+            const updatedData = await firestoreRead(() => getSubjectData(currentUser.uid, subject));
+            if (updatedData) {
+              dataMap.set(subject, updatedData);
+            }
+          }
+        }
+      });
+      await Promise.all(gradeUpdatePromises);
+
+      setSubjectsData(new Map(dataMap));
+      setTabValue((prev) => (prev >= userSubjects.length ? 0 : prev));
+    } catch (err: any) {
+      setError(err.message || t('error.connectionLost'));
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, userData, t]);
+
   useEffect(() => {
     console.log('StudentDashboard useEffect triggered', { currentUser: !!currentUser, userData: !!userData, role: userData?.role });
     
@@ -70,7 +150,6 @@ const StudentDashboard: React.FC = () => {
     
     if (!userData) {
       console.log('No userData yet, waiting...');
-      // Wait for userData to load
       return;
     }
     
@@ -80,84 +159,14 @@ const StudentDashboard: React.FC = () => {
       return;
     }
 
-    console.log('Loading data for student...');
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        
-        // Get all subjects for this user
-        const userSubjects = await getUserSubjects(currentUser.uid);
-        setSubjects(userSubjects);
-
-        if (userSubjects.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        // Load data for all subjects
-        const subjectDataPromises = await Promise.all(
-          userSubjects.map((subject) => getSubjectData(currentUser.uid, subject))
-        );
-
-        // Load worksheets for each subject
-        const worksheetsPromises = await Promise.all(
-          userSubjects.map((subject) => getRecentWorksheets(currentUser.uid, subject, 10))
-        );
-
-        // Create maps
-        const dataMap = new Map<Subject, SubjectData>();
-        const worksheetsMap = new Map<Subject, Worksheet[]>();
-
-        userSubjects.forEach((subject, index) => {
-          const data = subjectDataPromises[index];
-          console.log(`Subject ${subject}:`, data);
-          // Always set data, even if null (to track which subjects exist)
-          if (data) {
-            dataMap.set(subject, data);
-          }
-          const worksheetsForSubject = worksheetsPromises[index] || [];
-          console.log(`Worksheets for ${subject}:`, worksheetsForSubject);
-          worksheetsMap.set(subject, worksheetsForSubject);
-        });
-
-        console.log('Final dataMap:', Array.from(dataMap.entries()));
-        console.log('Final worksheetsMap:', Array.from(worksheetsMap.entries()));
-        setSubjectsData(dataMap);
-        setWorksheets(worksheetsMap);
-        
-        // Check and recalculate grades for subjects that need it
-        const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
-        const gradeUpdatePromises = userSubjects.map(async (subject) => {
-          const data = dataMap.get(subject);
-          if (data && data.topicAssignments.length > 0) {
-            // Check if grade is stale or missing
-            if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
-              // Recalculate and update grade
-              await calculateAndUpdateGrade(currentUser.uid, subject);
-              // Refresh subject data to get updated grade
-              const updatedData = await getSubjectData(currentUser.uid, subject);
-              if (updatedData) {
-                dataMap.set(subject, updatedData);
-              }
-            }
-          }
-        });
-        await Promise.all(gradeUpdatePromises);
-        
-        // Update state with refreshed data (including updated grades)
-        setSubjectsData(new Map(dataMap));
-        
-        // Reset tab value if it's out of bounds
-        setTabValue((prev) => prev >= userSubjects.length ? 0 : prev);
-      } catch (err: any) {
-        setError(err.message || t('error.failedToLoad'));
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadData();
-  }, [currentUser, userData, t]);
+  }, [currentUser, userData, loadData]);
+
+  useOnFirestoreRecovery(() => {
+    if (!loading && currentUser && userData?.role === 'student') {
+      void loadData();
+    }
+  });
 
   const handlePractice = async (subject: Subject) => {
     if (!currentUser) return;
@@ -196,7 +205,14 @@ const StudentDashboard: React.FC = () => {
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Box display="flex" flexDirection="column" alignItems="center" gap={2} py={4}>
+        <Alert severity="error">{error}</Alert>
+        <Button variant="contained" onClick={() => void loadData()}>
+          {t('common.retry')}
+        </Button>
+      </Box>
+    );
   }
 
   if (subjects.length === 0) {
@@ -241,6 +257,7 @@ const StudentDashboard: React.FC = () => {
             subjectData={currentSubjectData} 
             onPractice={handlePractice}
             isReadOnly={true}
+            onUpdate={() => void loadData()}
           />
 
           {/* Recent Worksheets Component */}

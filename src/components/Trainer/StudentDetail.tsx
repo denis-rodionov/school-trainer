@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -18,6 +18,8 @@ import RecentWorksheets from '../Student/RecentWorksheets';
 import AssignTopicsDialog from './AssignTopicsDialog';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
+import { firestoreRead } from '../../utils/firestoreResilience';
+import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
 
 const StudentDetail: React.FC = () => {
   const { studentId } = useParams<{ studentId: string }>();
@@ -54,113 +56,82 @@ const StudentDetail: React.FC = () => {
     }
   };
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!studentId) return;
 
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        
-        // Get all subjects for this user
-        const userSubjects = await getUserSubjects(studentId);
-        setSubjects(userSubjects);
+    try {
+      setLoading(true);
+      setError('');
 
-        const studentData = await getUser(studentId);
-        setStudent(studentData);
+      const userSubjects = await firestoreRead(() => getUserSubjects(studentId));
+      setSubjects(userSubjects);
 
-        if (userSubjects.length === 0) {
-          setLoading(false);
-          return;
+      const studentData = await firestoreRead(() => getUser(studentId));
+      setStudent(studentData);
+
+      if (userSubjects.length === 0) {
+        return;
+      }
+
+      const subjectDataPromises = await firestoreRead(() =>
+        Promise.all(userSubjects.map((subject) => getSubjectData(studentId, subject)))
+      );
+
+      const worksheetsPromises = await firestoreRead(() =>
+        Promise.all(userSubjects.map((subject) => getRecentWorksheets(studentId, subject, 10)))
+      );
+
+      const dataMap = new Map<Subject, SubjectData>();
+      const worksheetsMap = new Map<Subject, Worksheet[]>();
+
+      userSubjects.forEach((subject, index) => {
+        const data = subjectDataPromises[index];
+        if (data) {
+          dataMap.set(subject, data);
         }
+        worksheetsMap.set(subject, worksheetsPromises[index]);
+      });
 
-        // Load data for all subjects
-        const subjectDataPromises = await Promise.all(
-          userSubjects.map((subject) => getSubjectData(studentId, subject))
-        );
-
-        // Load worksheets for each subject
-        const worksheetsPromises = await Promise.all(
-          userSubjects.map((subject) => getRecentWorksheets(studentId, subject, 10))
-        );
-
-        // Create maps
-        const dataMap = new Map<Subject, SubjectData>();
-        const worksheetsMap = new Map<Subject, Worksheet[]>();
-
-        userSubjects.forEach((subject, index) => {
-          const data = subjectDataPromises[index];
-          if (data) {
-            dataMap.set(subject, data);
-          }
-          worksheetsMap.set(subject, worksheetsPromises[index]);
-        });
-
-        // Check and recalculate grades for subjects that need it
-        const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
-        const gradeUpdatePromises = userSubjects.map(async (subject) => {
-          const data = dataMap.get(subject);
-          if (data && data.topicAssignments.length > 0) {
-            // Check if grade is stale or missing
-            if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
-              // Recalculate and update grade
-              await calculateAndUpdateGrade(studentId, subject);
-              // Refresh subject data to get updated grade
-              const updatedData = await getSubjectData(studentId, subject);
-              if (updatedData) {
-                dataMap.set(subject, updatedData);
-              }
+      const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
+      const gradeUpdatePromises = userSubjects.map(async (subject) => {
+        const data = dataMap.get(subject);
+        if (data && data.topicAssignments.length > 0) {
+          if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
+            await firestoreRead(() => calculateAndUpdateGrade(studentId, subject));
+            const updatedData = await firestoreRead(() => getSubjectData(studentId, subject));
+            if (updatedData) {
+              dataMap.set(subject, updatedData);
             }
           }
-        });
-        await Promise.all(gradeUpdatePromises);
+        }
+      });
+      await Promise.all(gradeUpdatePromises);
 
-        setSubjectsData(new Map(dataMap));
-        setWorksheets(worksheetsMap);
-      } catch (err: any) {
-        setError(err.message || t('error.failedToLoadStudentData'));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
+      setSubjectsData(new Map(dataMap));
+      setWorksheets(worksheetsMap);
+    } catch (err: any) {
+      setError(err.message || t('error.connectionLost'));
+    } finally {
+      setLoading(false);
+    }
   }, [studentId, t]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useOnFirestoreRecovery(() => {
+    if (!loading && studentId) {
+      void loadData();
+    }
+  });
 
   const handleAssignClick = () => {
     setAssignDialogOpen(true);
   };
 
   const handleAssignSave = () => {
-    // Reload data
-    if (!studentId) return;
-    const loadData = async () => {
-      try {
-        const userSubjects = await getUserSubjects(studentId);
-        setSubjects(userSubjects);
-
-        if (userSubjects.length === 0) {
-          return;
-        }
-
-        const subjectDataPromises = await Promise.all(
-          userSubjects.map((subject) => getSubjectData(studentId, subject))
-        );
-
-        const dataMap = new Map<Subject, SubjectData>();
-        userSubjects.forEach((subject, index) => {
-          const data = subjectDataPromises[index];
-          if (data) {
-            dataMap.set(subject, data);
-          }
-        });
-
-        setSubjectsData(dataMap);
-      } catch (err: any) {
-        setError(err.message || t('error.failedToReloadData'));
-      }
-    };
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadData();
   };
 
   if (loading) {
@@ -172,7 +143,14 @@ const StudentDetail: React.FC = () => {
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Box display="flex" flexDirection="column" alignItems="center" gap={2} py={4}>
+        <Alert severity="error">{error}</Alert>
+        <Button variant="contained" onClick={() => void loadData()}>
+          {t('common.retry')}
+        </Button>
+      </Box>
+    );
   }
 
   if (!student) {

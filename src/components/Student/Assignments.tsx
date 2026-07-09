@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -28,6 +28,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
 import { generateExerciseForTopic } from '../../services/exerciseGenerator';
+import { firestoreRead } from '../../utils/firestoreResilience';
+import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
+import GutscheinPanel from '../Trainer/GutscheinPanel';
+import { DEFAULT_GUTSCHEINS } from '../../services/users';
 
 interface AssignmentsProps {
   subject: Subject;
@@ -56,6 +60,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
   const navigate = useNavigate();
   const [topics, setTopics] = useState<Map<string, Topic>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
@@ -63,39 +68,47 @@ const Assignments: React.FC<AssignmentsProps> = ({
   const [aiError, setAiError] = useState<string | null>(null);
   const subjectName = translateSubject(subject, language);
 
+  const loadTopics = useCallback(async () => {
+    if (!subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
+      setTopics(new Map());
+      setLoading(false);
+      setLoadError('');
+      return;
+    }
+
+    setLoading(true);
+    setLoadError('');
+    setTopics(new Map());
+
+    try {
+      const loadedTopics = await firestoreRead(() =>
+        Promise.all(subjectData.topicAssignments.map((assignment) => getTopic(assignment.topicId)))
+      );
+      const topicMap = new Map<string, Topic>();
+
+      loadedTopics.forEach((topic, index) => {
+        if (topic) {
+          topicMap.set(subjectData.topicAssignments[index].topicId, topic);
+        }
+      });
+
+      setTopics(topicMap);
+    } catch (err: any) {
+      setLoadError(err.message || t('error.connectionLost'));
+    } finally {
+      setLoading(false);
+    }
+  }, [subjectData, t]);
+
   useEffect(() => {
-    const loadTopics = async () => {
-      if (!subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
-        setTopics(new Map());
-        setLoading(false);
-        return;
-      }
+    void loadTopics();
+  }, [loadTopics]);
 
-      setLoading(true);
-      setTopics(new Map()); // Clear previous tab's topics so we don't show old names with new IDs
-      try {
-        const topicPromises = subjectData.topicAssignments.map((assignment) =>
-          getTopic(assignment.topicId)
-        );
-        const loadedTopics = await Promise.all(topicPromises);
-        const topicMap = new Map<string, Topic>();
-
-        loadedTopics.forEach((topic, index) => {
-          if (topic) {
-            topicMap.set(subjectData.topicAssignments[index].topicId, topic);
-          }
-        });
-
-        setTopics(topicMap);
-      } catch (err) {
-        console.error('Failed to load topics:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTopics();
-  }, [subjectData]);
+  useOnFirestoreRecovery(() => {
+    if (!loading && subjectData?.topicAssignments?.length) {
+      void loadTopics();
+    }
+  });
 
   const handlePractice = async () => {
     if (!targetUserId || !subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
@@ -196,6 +209,25 @@ const Assignments: React.FC<AssignmentsProps> = ({
       setGeneratingWorksheet(false);
     }
   };
+
+  if (loadError) {
+    return (
+      <Card elevation={3} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+        <CardContent sx={{ p: 3 }}>
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={() => void loadTopics()}>
+                {t('common.retry')}
+              </Button>
+            }
+          >
+            {loadError}
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (loading) {
     return (
@@ -316,6 +348,14 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 </Typography>
               </Box>
             )}
+
+            <GutscheinPanel
+              subject={subject}
+              gutscheins={subjectData.gutscheins ?? DEFAULT_GUTSCHEINS}
+              isTrainerMode={!isReadOnly && Boolean(propStudentId)}
+              studentId={propStudentId}
+              onUpdate={onUpdate}
+            />
           </Box>
         )}
 

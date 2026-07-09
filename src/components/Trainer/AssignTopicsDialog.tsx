@@ -138,6 +138,7 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
           statistics: {
             worksheetsLast7Days: 0,
           },
+          gutscheins: { balance: 0, defaultWeekly: 0 },
         });
       }
 

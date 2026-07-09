@@ -23,6 +23,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.success': 'Success',
     'common.confirm': 'Confirm',
     'common.close': 'Close',
+    'common.retry': 'Retry',
     
     // Dashboard
     'dashboard.title': 'Dashboard',
@@ -49,7 +50,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'grade.5': 'Deficient / Poor',
     'grade.6': 'Insufficient / Fail',
     'grade.noGrade': 'Complete the first worksheet to see the grade.',
-    
+
+    // Gutscheins (Passes — kid-friendly English for grade-protection vouchers)
+    'gutschein.label': 'Passes',
+    'gutschein.defaultWeekly': 'Weekly allowance',
+    'gutschein.defaultWeeklyLabel': 'Weekly allowance: {count}',
+    'gutschein.addBonus': 'Add bonus passes',
+    'gutschein.addOne': '+1',
+    'gutschein.addTwo': '+2',
+    'gutschein.addCustom': 'Add',
+    'gutschein.saved': 'Saved',
+    'gutschein.invalidAmount': 'Enter a valid number (0 or more).',
+
     // Worksheet
     'worksheet.title': 'Worksheet',
     'worksheet.score': 'Score',
@@ -122,6 +134,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'error.studentNotFound': 'Student not found',
     'error.unknownError': 'Unknown error occurred',
     'error.noExercisesGenerated': 'No exercises could be generated. Please contact your trainer.',
+    'error.connectionLost': 'Connection lost. Please try again.',
     
     // Validation
     'validation.subjectRequired': 'Subject is required',
@@ -224,6 +237,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.success': 'Успешно',
     'common.confirm': 'Подтвердить',
     'common.close': 'Закрыть',
+    'common.retry': 'Повторить',
     
     // Dashboard
     'dashboard.title': 'Панель управления',
@@ -250,7 +264,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'grade.5': 'Неудовлетворительно',
     'grade.6': 'Очень плохо',
     'grade.noGrade': 'Выполните первый рабочий лист, чтобы увидеть оценку.',
-    
+
+    // Gutscheins
+    'gutschein.label': 'Гутшайн',
+    'gutschein.defaultWeekly': 'Недельная норма',
+    'gutschein.defaultWeeklyLabel': 'Недельная норма: {count}',
+    'gutschein.addBonus': 'Добавить бонусные Гутшайны',
+    'gutschein.addOne': '+1',
+    'gutschein.addTwo': '+2',
+    'gutschein.addCustom': 'Добавить',
+    'gutschein.saved': 'Сохранено',
+    'gutschein.invalidAmount': 'Введите корректное число (0 или больше).',
+
     // Worksheet
     'worksheet.title': 'Рабочий лист',
     'worksheet.score': 'Оценка',
@@ -323,6 +348,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'error.studentNotFound': 'Студент не найден',
     'error.unknownError': 'Произошла неизвестная ошибка',
     'error.noExercisesGenerated': 'Не удалось создать упражнения. Пожалуйста, свяжитесь с вашим тренером.',
+    'error.connectionLost': 'Соединение потеряно. Пожалуйста, попробуйте снова.',
     
     // Validation
     'validation.subjectRequired': 'Предмет обязателен',
@@ -425,6 +451,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.success': 'Erfolg',
     'common.confirm': 'Bestätigen',
     'common.close': 'Schließen',
+    'common.retry': 'Erneut versuchen',
     
     // Dashboard
     'dashboard.title': 'Dashboard',
@@ -451,7 +478,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'grade.5': 'Mangelhaft',
     'grade.6': 'Ungenügend',
     'grade.noGrade': 'Vervollständige das erste Arbeitsblatt, um die Note zu sehen.',
-    
+
+    // Gutscheins
+    'gutschein.label': 'Gutscheine',
+    'gutschein.defaultWeekly': 'Wöchentliches Kontingent',
+    'gutschein.defaultWeeklyLabel': 'Wöchentliches Kontingent: {count}',
+    'gutschein.addBonus': 'Bonus-Gutscheine hinzufügen',
+    'gutschein.addOne': '+1',
+    'gutschein.addTwo': '+2',
+    'gutschein.addCustom': 'Hinzufügen',
+    'gutschein.saved': 'Gespeichert',
+    'gutschein.invalidAmount': 'Bitte eine gültige Zahl eingeben (0 oder mehr).',
+
     // Worksheet
     'worksheet.title': 'Arbeitsblatt',
     'worksheet.score': 'Punktzahl',
@@ -524,6 +562,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'error.studentNotFound': 'Schüler nicht gefunden',
     'error.unknownError': 'Unbekannter Fehler aufgetreten',
     'error.noExercisesGenerated': 'Es konnten keine Übungen erstellt werden. Bitte kontaktieren Sie Ihren Trainer.',
+    'error.connectionLost': 'Verbindung verloren. Bitte versuchen Sie es erneut.',
     
     // Validation
     'validation.subjectRequired': 'Fach ist erforderlich',

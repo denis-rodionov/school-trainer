@@ -11,9 +11,10 @@
 import { Timestamp } from 'firebase/firestore';
 import { differenceInDays, isToday } from 'date-fns';
 import { getCompletedWorksheetsBySubject } from './worksheets';
-import { updateSubjectGrade } from './users';
+import { getSubjectData, updateSubjectGradeAndGutscheins, normalizeGutscheins } from './users';
 import { isWithinLastDays } from '../utils/dateUtils';
 import { computeGrade } from '../utils/gradeCalculator';
+import { applyGutscheinsToGrade } from '../utils/gutscheinCalculator';
 import { Subject } from '../types';
 
 /**
@@ -75,13 +76,32 @@ export const calculateAndUpdateGrade = async (
   studentId: string,
   subject: Subject
 ): Promise<number | null> => {
-  const grade = await calculateGrade(studentId, subject);
+  const subjectData = await getSubjectData(studentId, subject);
+  const currentGrade = subjectData?.statistics.grade;
+  const gutscheins = normalizeGutscheins(subjectData?.gutscheins);
+
+  const rawGrade = await calculateGrade(studentId, subject);
+  const { adjustedGrade, spent } = applyGutscheinsToGrade(
+    rawGrade,
+    currentGrade,
+    gutscheins.balance
+  );
+
+  const updatedGutscheins = {
+    ...gutscheins,
+    balance: gutscheins.balance - spent,
+  };
   const gradeUpdatedDate = Timestamp.now();
-  
-  // Persist grade (even if null, to mark that we've checked)
-  await updateSubjectGrade(studentId, subject, grade, gradeUpdatedDate);
-  
-  return grade;
+
+  await updateSubjectGradeAndGutscheins(
+    studentId,
+    subject,
+    adjustedGrade,
+    gradeUpdatedDate,
+    updatedGutscheins
+  );
+
+  return adjustedGrade;
 };
 
 /**
