@@ -21,6 +21,12 @@ describe('dictationParser', () => {
     it('returns empty string when no textarea', () => {
       expect(extractDictationAnswer('<p>no dictation</p>')).toBe('');
     });
+
+    it('extracts answers with apostrophes from double-quoted attributes', () => {
+      const markdown =
+        '<textarea data-answer="It&#39;s a sunny day." rows="5"></textarea>';
+      expect(extractDictationAnswer(markdown)).toBe("It's a sunny day.");
+    });
   });
 
   describe('parseDictationMarkdown', () => {

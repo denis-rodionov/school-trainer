@@ -31,8 +31,8 @@ import ExerciseBlock from './ExerciseBlock';
 import DictationExerciseBlock from './DictationExerciseBlock';
 import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl, extractDraftAnswers, updateMarkdownWithDraftAnswers } from '../../utils/markdownParser';
 import { extractDictationAnswer } from '../../utils/dictationParser';
-import { fuzzyMatchText } from '../../utils/dictationScoring';
-import { computeWorksheetScore } from '../../utils/worksheetScoring';
+import { fuzzyMatchText, getWordLevelDifferences } from '../../utils/dictationScoring';
+import { computeWorksheetScore, computeWorksheetScoreFromMistakes } from '../../utils/worksheetScoring';
 import {
   getSubjectData,
 } from '../../services/users';
@@ -62,7 +62,7 @@ const WorksheetScreen: React.FC = () => {
   const [regenerationProgress, setRegenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [shouldGoToDashboard, setShouldGoToDashboard] = useState(false);
   const [trainerMarkedErrors, setTrainerMarkedErrors] = useState<Set<string>>(new Set()); // Track which exercises trainer marked as errors (by exercise ID)
-  const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Track number of exercises with mistakes from first submit
+  const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Total mistakes from first check (words/gaps), fixed for final score
   const [exercisesWithMistakesIds, setExercisesWithMistakesIds] = useState<Set<string>>(new Set()); // Track which exercises had mistakes on first submit (for updating attempts/userInput)
   const [currentFocusedExerciseId, setCurrentFocusedExerciseId] = useState<string | null>(null); // Track which exercise is currently focused for auto-save
   const answersRef = useRef<string[]>([]); // Ref to store current answers for unmount save
@@ -301,6 +301,35 @@ const WorksheetScreen: React.FC = () => {
     setCurrentFocusedExerciseId(exerciseId);
   };
 
+  const saveAllExerciseDrafts = async () => {
+    if (!worksheet) return;
+
+    const { updateExercise } = await import('../../services/worksheets');
+    let answerIndex = 0;
+
+    for (const exercise of exercises) {
+      let exerciseDraftAnswers: string[] = [];
+
+      if (isDictationExercise(exercise)) {
+        exerciseDraftAnswers = [answers[answerIndex] || ''];
+        answerIndex += 1;
+      } else {
+        const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+        exerciseDraftAnswers = answers.slice(answerIndex, answerIndex + correctAnswers.length);
+        answerIndex += correctAnswers.length;
+      }
+
+      const updatedMarkdown = updateMarkdownWithDraftAnswers(
+        exercise.markdown ?? '',
+        exerciseDraftAnswers
+      );
+
+      await updateExercise(worksheet.id, exercise.id, {
+        markdown: updatedMarkdown,
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (isReadOnly) return;
 
@@ -311,36 +340,34 @@ const WorksheetScreen: React.FC = () => {
     const exercisesWithMistakesSet = new Set<string>();
     let globalIndex = 0;
     let allCorrect = true;
+    let totalMistakes = 0;
 
     exercises.forEach((exercise, exerciseIndex) => {
       let exerciseHasError = false;
-      const exerciseAnswers: string[] = [];
 
       if (isDictationExercise(exercise)) {
-        // Dictation exercise: single answer with fuzzy matching
         const correctAnswer = extractDictationAnswer(exercise.markdown);
         const userAnswer = answers[globalIndex] || '';
         const isError = !fuzzyMatchText(userAnswer, correctAnswer);
-        
+
         newErrors[globalIndex] = isError;
-        exerciseAnswers.push(userAnswer);
 
         if (isError) {
+          totalMistakes += getWordLevelDifferences(userAnswer, correctAnswer).length;
           exerciseHasError = true;
           allCorrect = false;
         }
         globalIndex++;
       } else {
-        // Fill gaps exercise: multiple answers with exact matching
         const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
         correctAnswers.forEach((correctAnswer) => {
           const userAnswer = answers[globalIndex]?.trim().toLowerCase();
           const correct = correctAnswer.trim().toLowerCase();
           const isError = userAnswer !== correct;
           newErrors[globalIndex] = isError;
-          exerciseAnswers.push(answers[globalIndex] || '');
 
           if (isError) {
+            totalMistakes += 1;
             exerciseHasError = true;
             allCorrect = false;
           }
@@ -355,25 +382,22 @@ const WorksheetScreen: React.FC = () => {
 
     setErrors(newErrors);
 
-    // If mistakeCount is not set yet, this is the first submit
-    // Calculate and store the mistake count and which exercises had mistakes, then return (don't submit yet)
-    if (mistakeCount === null) {
-      const calculatedMistakeCount = exercisesWithMistakesSet.size;
-      setMistakeCount(calculatedMistakeCount);
-      setExercisesWithMistakesIds(new Set(exercisesWithMistakesSet)); // Store which exercises had mistakes
-      
-      // Update attempts and previous answers for exercises with mistakes
+    const isFirstCheck = mistakeCount === null;
+    const scoreMistakes = isFirstCheck ? totalMistakes : mistakeCount;
+
+    if (isFirstCheck) {
+      setMistakeCount(totalMistakes);
+      setExercisesWithMistakesIds(new Set(exercisesWithMistakesSet));
+
       let tempGlobalIndex = 0;
       exercises.forEach((exercise, exerciseIndex) => {
         if (exercisesWithMistakesSet.has(exercise.id)) {
           const exerciseAnswers: string[] = [];
-          
+
           if (isDictationExercise(exercise)) {
-            // Dictation: single answer
             exerciseAnswers.push(answers[tempGlobalIndex] || '');
             tempGlobalIndex++;
           } else {
-            // Fill gaps: multiple answers
             const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
             correctAnswers.forEach(() => {
               exerciseAnswers.push(answers[tempGlobalIndex] || '');
@@ -388,68 +412,59 @@ const WorksheetScreen: React.FC = () => {
           const newAttempts = [...attempts];
           newAttempts[exerciseIndex] = (newAttempts[exerciseIndex] || 1) + 1;
           setAttempts(newAttempts);
+        } else if (isDictationExercise(exercise)) {
+          tempGlobalIndex++;
         } else {
-          // Skip answers for exercises without mistakes
-          if (isDictationExercise(exercise)) {
-            tempGlobalIndex++;
-          } else {
-            const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-            tempGlobalIndex += correctAnswers.length;
-          }
+          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
+          tempGlobalIndex += correctAnswers.length;
         }
       });
 
-      // Don't submit if there are errors - user can correct and resubmit
-      return;
-    }
+      try {
+        setSaving(true);
+        await saveAllExerciseDrafts();
+      } catch (err: any) {
+        alert(err.message || t('error.failedToSubmitWorksheet'));
+        return;
+      } finally {
+        setSaving(false);
+      }
 
-    // If mistakeCount is set and all answers are correct, proceed with submission
-    if (!allCorrect) {
-      return; // Still have errors, wait for user to fix them
+      if (!allCorrect) {
+        return;
+      }
+    } else if (!allCorrect) {
+      return;
     }
 
     try {
       setSaving(true);
 
-      // Calculate score using the same method as trainer: (totalExercises - errors) / totalExercises * 100
-      // Use the mistakeCount from the first submit (doesn't change after that)
-      const totalExercises = exercises.length;
-      const errorCount = mistakeCount;
-      const correctCount = totalExercises - errorCount;
-      const score = computeWorksheetScore(correctCount, totalExercises);
+      const score = computeWorksheetScoreFromMistakes(scoreMistakes ?? 0);
+      const exercisesMarkedOnFirstCheck = isFirstCheck
+        ? exercisesWithMistakesSet
+        : exercisesWithMistakesIds;
 
-      // Update exercises with attempt and userInput
-      // Use the exercisesWithMistakesIds from the first submit (doesn't change)
       const exerciseUpdates: Array<{ exerciseId: string; updates: Partial<Exercise> }> = [];
 
       exercises.forEach((exercise, exerciseIndex) => {
-        // Check if this exercise had mistakes on first submit
-        const hasError = exercisesWithMistakesIds.has(exercise.id);
-        
-        // Determine attempt: 1 if no errors ever, 2+ if there were errors
+        const hasError = exercisesMarkedOnFirstCheck.has(exercise.id);
         const attempt = hasError ? (attempts[exerciseIndex] || 2) : 1;
-        
-        // userInput: null if attempt === 1 (got it right first try)
-        // userInput: last incorrect attempt if attempt > 1 (stored in previousAnswers)
         const lastIncorrectAttempt = previousAnswers[exerciseIndex] || [];
         let userInput: string | null = null;
-        
+
         if (attempt > 1) {
           if (isDictationExercise(exercise)) {
-            // For dictation, userInput is just the text
             userInput = lastIncorrectAttempt[0] || null;
           } else {
-            // For fill gaps, transform markdown with answers
             userInput = transformMarkdownWithAnswers(exercise.markdown ?? '', lastIncorrectAttempt);
           }
         }
 
-        // Build updates object, only including userInput if it's not null
         const updates: Partial<Exercise> = {
           attempt,
         };
-        
-        // Only include userInput if it has a value (not null or empty)
+
         if (userInput !== null && userInput !== undefined && userInput.trim() !== '') {
           updates.userInput = userInput;
         }
@@ -460,16 +475,14 @@ const WorksheetScreen: React.FC = () => {
         });
       });
 
-      // Update exercises in database
       const { updateExercise } = await import('../../services/worksheets');
       for (const { exerciseId, updates } of exerciseUpdates) {
         await updateExercise(worksheet.id, exerciseId, updates);
       }
 
-      // Complete worksheet (userInputs no longer needed, exercises already updated)
+      await saveAllExerciseDrafts();
       await completeWorksheet(worksheet.id, score);
 
-      // Calculate and update grade for the subject
       if (exercises.length > 0) {
         const firstExercise = exercises[0];
         const topic = await getTopic(firstExercise.topicId);
@@ -480,7 +493,6 @@ const WorksheetScreen: React.FC = () => {
         }
       }
 
-      // Reload worksheet to show completed state
       const updatedWorksheet = await getWorksheet(worksheet.id);
       setWorksheet(updatedWorksheet);
     } catch (err: any) {
@@ -931,7 +943,11 @@ const WorksheetScreen: React.FC = () => {
             disabled={saving || answers.length === 0 || answers.every((a) => !a.trim())}
             size="large"
           >
-            {saving ? t('worksheet.submit') + '...' : t('worksheet.submit')}
+            {saving
+              ? (mistakeCount === null ? t('worksheet.check') : t('worksheet.submit')) + '...'
+              : mistakeCount === null
+              ? t('worksheet.check')
+              : t('worksheet.submit')}
           </Button>
         </Box>
       )}

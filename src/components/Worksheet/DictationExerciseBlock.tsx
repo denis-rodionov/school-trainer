@@ -4,7 +4,7 @@ import { Close, PlayArrow, Pause } from '@mui/icons-material';
 import { Exercise } from '../../types';
 import { extractDictationAnswer } from '../../utils/dictationParser';
 import { extractAudioUrl } from '../../utils/markdownParser';
-import { getWordLevelDifferences } from '../../utils/dictationScoring';
+import { fuzzyMatchText, getWordLevelDifferences } from '../../utils/dictationScoring';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 function formatTime(seconds: number): string {
@@ -53,8 +53,8 @@ const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
   const correctAnswer = extractDictationAnswer(markdown);
   
   // For trainer view: check if answer is correct
-  const isCorrect = showCorrectAnswer && answer.trim() && 
-    answer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+  const isCorrect = showCorrectAnswer && answer.trim() &&
+    fuzzyMatchText(answer, correctAnswer);
 
   // Use a real <audio> in the DOM so we can seek and show progress
   useEffect(() => {
@@ -288,27 +288,42 @@ const DictationExerciseBlock: React.FC<DictationExerciseBlockProps> = ({
               }
               return (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
-                  {wordDiffs.map((d, i) =>
-                    d.actual ? (
+                  {wordDiffs.map((d, i) => {
+                    if (d.actual && d.expected == null) {
+                      return (
+                        <Chip
+                          key={i}
+                          label={d.actual}
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          sx={{ fontWeight: 500 }}
+                        />
+                      );
+                    }
+                    if (d.actual) {
+                      return (
+                        <Chip
+                          key={i}
+                          label={d.actual}
+                          size="small"
+                          color="error"
+                          variant="filled"
+                          sx={{ fontWeight: 500 }}
+                        />
+                      );
+                    }
+                    return (
                       <Chip
                         key={i}
-                        label={d.actual}
-                        size="small"
-                        color="error"
-                        variant="filled"
-                        sx={{ fontWeight: 500 }}
-                      />
-                    ) : (
-                      <Chip
-                        key={i}
-                        label={t('exercise.dictation.missingChip')}
+                        label={d.expected ?? t('exercise.dictation.missingChip')}
                         size="small"
                         color="error"
                         variant="outlined"
-                        sx={{ fontWeight: 500 }}
+                        sx={{ fontWeight: 500, textDecoration: 'line-through' }}
                       />
-                    )
-                  )}
+                    );
+                  })}
                 </Box>
               );
             })()}

@@ -27,13 +27,13 @@ export const extractAudioUrl = (markdown: string): string | null => {
  */
 export const extractDictationAnswer = (markdown: string): string => {
   const text = markdown ?? '';
-  const textareaPattern = /<textarea[^>]*data-answer=["']([^"']+)["'][^>]*>/i;
-  const match = text.match(textareaPattern);
+  const match =
+    text.match(/<textarea[^>]*data-answer="([^"]*)"[^>]*>/i) ||
+    text.match(/<textarea[^>]*data-answer='([^']*)'[^>]*>/i);
   if (!match) {
     return '';
   }
-  
-  // Unescape HTML entities
+
   const answer = match[1]
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
