@@ -69,5 +69,14 @@ describe('firestoreResilience', () => {
       expect(fn).toHaveBeenCalledTimes(2);
       expect(enableNetwork).toHaveBeenCalled();
     });
+
+    it('does not retry non-timeout Firestore errors', async () => {
+      const { enableNetwork } = require('firebase/firestore');
+      const fn = jest.fn().mockRejectedValue(new Error('Target ID already exists: 1008'));
+
+      await expect(firestoreRead(fn)).rejects.toThrow('Target ID already exists: 1008');
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(enableNetwork).not.toHaveBeenCalled();
+    });
   });
 });

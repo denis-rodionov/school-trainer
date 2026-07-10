@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -34,6 +34,7 @@ const StudentDetail: React.FC = () => {
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const loadGenerationRef = useRef(0);
 
   // Sync tab with URL subject param (so back from worksheet restores the tab)
   useEffect(() => {
@@ -59,14 +60,18 @@ const StudentDetail: React.FC = () => {
   const loadData = useCallback(async () => {
     if (!studentId) return;
 
+    const generation = ++loadGenerationRef.current;
+
     try {
       setLoading(true);
       setError('');
 
       const userSubjects = await firestoreRead(() => getUserSubjects(studentId));
+      if (generation !== loadGenerationRef.current) return;
       setSubjects(userSubjects);
 
       const studentData = await firestoreRead(() => getUser(studentId));
+      if (generation !== loadGenerationRef.current) return;
       setStudent(studentData);
 
       if (userSubjects.length === 0) {
@@ -76,10 +81,12 @@ const StudentDetail: React.FC = () => {
       const subjectDataPromises = await firestoreRead(() =>
         Promise.all(userSubjects.map((subject) => getSubjectData(studentId, subject)))
       );
+      if (generation !== loadGenerationRef.current) return;
 
       const worksheetsPromises = await firestoreRead(() =>
         Promise.all(userSubjects.map((subject) => getRecentWorksheets(studentId, subject, 10)))
       );
+      if (generation !== loadGenerationRef.current) return;
 
       const dataMap = new Map<Subject, SubjectData>();
       const worksheetsMap = new Map<Subject, Worksheet[]>();
@@ -106,13 +113,17 @@ const StudentDetail: React.FC = () => {
         }
       });
       await Promise.all(gradeUpdatePromises);
+      if (generation !== loadGenerationRef.current) return;
 
       setSubjectsData(new Map(dataMap));
       setWorksheets(worksheetsMap);
     } catch (err: any) {
+      if (generation !== loadGenerationRef.current) return;
       setError(err.message || t('error.connectionLost'));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }, [studentId, t]);
 

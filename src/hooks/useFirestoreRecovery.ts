@@ -5,26 +5,40 @@ import {
   recoverFirestoreConnection,
 } from '../utils/firestoreResilience';
 
+function scheduleFirestoreRecovery(): void {
+  void recoverFirestoreConnection().then(() => {
+    notifyFirestoreRecovery();
+  });
+}
+
 export function useFirestoreRecovery(): void {
   useEffect(() => {
+    let visibilityRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void recoverFirestoreConnection().then(() => {
-          notifyFirestoreRecovery();
-        });
+      if (document.visibilityState !== 'visible') {
+        return;
       }
+      if (visibilityRecoveryTimer) {
+        clearTimeout(visibilityRecoveryTimer);
+      }
+      visibilityRecoveryTimer = setTimeout(() => {
+        visibilityRecoveryTimer = null;
+        scheduleFirestoreRecovery();
+      }, 300);
     };
 
     const handleOnline = () => {
-      void recoverFirestoreConnection().then(() => {
-        notifyFirestoreRecovery();
-      });
+      scheduleFirestoreRecovery();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('online', handleOnline);
 
     return () => {
+      if (visibilityRecoveryTimer) {
+        clearTimeout(visibilityRecoveryTimer);
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };

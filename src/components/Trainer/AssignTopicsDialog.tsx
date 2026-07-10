@@ -282,15 +282,16 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
                       <ListItemText
                         primary={topic.shortName}
                         secondary={
-                          <Box>
-                            <Typography variant="body2" color="text.secondary">
+                          <>
+                            <Typography variant="body2" color="text.secondary" component="div">
                               {topic.taskDescription}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" component="div">
                               {t('assignTopics.subject')} {translateSubject(topic.subject, language)}
                             </Typography>
-                          </Box>
+                          </>
                         }
+                        secondaryTypographyProps={{ component: 'div' }}
                         sx={{ flex: 1 }}
                       />
                       <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', flexShrink: 0 }}>

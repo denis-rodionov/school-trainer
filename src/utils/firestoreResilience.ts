@@ -30,22 +30,45 @@ export function withTimeout<T>(promise: Promise<T>, ms = DEFAULT_TIMEOUT_MS): Pr
   });
 }
 
+let recoveryPromise: Promise<void> | null = null;
+let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+
 export async function recoverFirestoreConnection(): Promise<void> {
-  try {
-    await enableNetwork(db);
-  } catch (error) {
-    console.warn('Firestore connection recovery failed:', error);
+  if (!recoveryPromise) {
+    recoveryPromise = (async () => {
+      try {
+        await enableNetwork(db);
+      } catch (error) {
+        console.warn('Firestore connection recovery failed:', error);
+      } finally {
+        recoveryPromise = null;
+      }
+    })();
   }
+  return recoveryPromise;
 }
 
 export function notifyFirestoreRecovery(): void {
-  window.dispatchEvent(new CustomEvent(FIRESTORE_RECOVERY_EVENT));
+  if (notifyTimer) {
+    clearTimeout(notifyTimer);
+  }
+  notifyTimer = setTimeout(() => {
+    notifyTimer = null;
+    window.dispatchEvent(new CustomEvent(FIRESTORE_RECOVERY_EVENT));
+  }, 150);
+}
+
+function isRecoverableFirestoreError(error: unknown): boolean {
+  return error instanceof FirestoreTimeoutError;
 }
 
 export async function firestoreRead<T>(fn: () => Promise<T>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   try {
     return await withTimeout(fn(), timeoutMs);
   } catch (error) {
+    if (!isRecoverableFirestoreError(error)) {
+      throw error;
+    }
     await recoverFirestoreConnection();
     return withTimeout(fn(), timeoutMs);
   }
