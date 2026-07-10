@@ -78,29 +78,25 @@ const StudentDetail: React.FC = () => {
         return;
       }
 
-      const subjectDataPromises = await firestoreRead(() =>
-        Promise.all(userSubjects.map((subject) => getSubjectData(studentId, subject)))
-      );
-      if (generation !== loadGenerationRef.current) return;
-
-      const worksheetsPromises = await firestoreRead(() =>
-        Promise.all(userSubjects.map((subject) => getRecentWorksheets(studentId, subject, 10)))
-      );
-      if (generation !== loadGenerationRef.current) return;
-
       const dataMap = new Map<Subject, SubjectData>();
       const worksheetsMap = new Map<Subject, Worksheet[]>();
 
-      userSubjects.forEach((subject, index) => {
-        const data = subjectDataPromises[index];
+      for (const subject of userSubjects) {
+        const data = await firestoreRead(() => getSubjectData(studentId, subject));
+        if (generation !== loadGenerationRef.current) return;
         if (data) {
           dataMap.set(subject, data);
         }
-        worksheetsMap.set(subject, worksheetsPromises[index]);
-      });
+
+        const subjectWorksheets = await firestoreRead(() =>
+          getRecentWorksheets(studentId, subject, 10)
+        );
+        if (generation !== loadGenerationRef.current) return;
+        worksheetsMap.set(subject, subjectWorksheets);
+      }
 
       const { calculateAndUpdateGrade, isGradeStale } = await import('../../services/gradeService');
-      const gradeUpdatePromises = userSubjects.map(async (subject) => {
+      for (const subject of userSubjects) {
         const data = dataMap.get(subject);
         if (data && data.topicAssignments.length > 0) {
           if (isGradeStale(data.statistics.grade, data.statistics.gradeUpdatedDate)) {
@@ -111,8 +107,8 @@ const StudentDetail: React.FC = () => {
             }
           }
         }
-      });
-      await Promise.all(gradeUpdatePromises);
+        if (generation !== loadGenerationRef.current) return;
+      }
       if (generation !== loadGenerationRef.current) return;
 
       setSubjectsData(new Map(dataMap));

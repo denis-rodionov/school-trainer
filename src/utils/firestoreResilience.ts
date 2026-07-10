@@ -1,9 +1,7 @@
-import { enableNetwork } from 'firebase/firestore';
-import { db } from '../services/firebase';
-
 export const FIRESTORE_RECOVERY_EVENT = 'firestore-recovery';
 
 export const DEFAULT_TIMEOUT_MS = 4000;
+const RETRY_DELAY_MS = 500;
 
 export class FirestoreTimeoutError extends Error {
   constructor(message = 'Firestore operation timed out') {
@@ -33,17 +31,16 @@ export function withTimeout<T>(promise: Promise<T>, ms = DEFAULT_TIMEOUT_MS): Pr
 let recoveryPromise: Promise<void> | null = null;
 let notifyTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Pause before a timed-out read retry. Do not call enableNetwork() here — it corrupts
+ *  internal watch-target state when the network was never disabled (Firebase SDK bug). */
 export async function recoverFirestoreConnection(): Promise<void> {
   if (!recoveryPromise) {
-    recoveryPromise = (async () => {
-      try {
-        await enableNetwork(db);
-      } catch (error) {
-        console.warn('Firestore connection recovery failed:', error);
-      } finally {
+    recoveryPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
         recoveryPromise = null;
-      }
-    })();
+        resolve();
+      }, RETRY_DELAY_MS);
+    });
   }
   return recoveryPromise;
 }

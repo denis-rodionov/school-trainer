@@ -5,14 +5,6 @@ import {
   recoverFirestoreConnection,
 } from './firestoreResilience';
 
-jest.mock('../services/firebase', () => ({
-  db: {},
-}));
-
-jest.mock('firebase/firestore', () => ({
-  enableNetwork: jest.fn().mockResolvedValue(undefined),
-}));
-
 describe('firestoreResilience', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -48,35 +40,43 @@ describe('firestoreResilience', () => {
   });
 
   describe('recoverFirestoreConnection', () => {
-    it('calls enableNetwork on the Firestore instance', async () => {
-      const { enableNetwork } = require('firebase/firestore');
-      await recoverFirestoreConnection();
-      expect(enableNetwork).toHaveBeenCalled();
+    it('waits before allowing a retry', async () => {
+      const recoveryPromise = recoverFirestoreConnection();
+      let settled = false;
+      void recoveryPromise.then(() => {
+        settled = true;
+      });
+
+      jest.advanceTimersByTime(499);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      jest.advanceTimersByTime(1);
+      await recoveryPromise;
+      expect(settled).toBe(true);
     });
   });
 
   describe('firestoreRead', () => {
     it('retries once after recovering the connection', async () => {
-      const { enableNetwork } = require('firebase/firestore');
+      jest.useRealTimers();
       const fn = jest
         .fn()
         .mockRejectedValueOnce(new FirestoreTimeoutError())
         .mockResolvedValueOnce('data');
 
-      const result = await firestoreRead(fn);
+      const result = await firestoreRead(fn, 100);
 
       expect(result).toBe('data');
       expect(fn).toHaveBeenCalledTimes(2);
-      expect(enableNetwork).toHaveBeenCalled();
+      jest.useFakeTimers();
     });
 
     it('does not retry non-timeout Firestore errors', async () => {
-      const { enableNetwork } = require('firebase/firestore');
       const fn = jest.fn().mockRejectedValue(new Error('Target ID already exists: 1008'));
 
       await expect(firestoreRead(fn)).rejects.toThrow('Target ID already exists: 1008');
       expect(fn).toHaveBeenCalledTimes(1);
-      expect(enableNetwork).not.toHaveBeenCalled();
     });
   });
 });

@@ -100,7 +100,8 @@ Remember: This is dictation text ${request.exerciseNumber}. It MUST be completel
           }]
         }],
         generationConfig: {
-          maxOutputTokens: 2000, // Increased to prevent truncation of longer texts
+          maxOutputTokens: 2000,
+          thinkingConfig: { thinkingBudget: 0 },
           temperature: 1.4, // Maximum temperature for maximum variation
           topP: 0.9,
           topK: 20,

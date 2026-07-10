@@ -171,6 +171,8 @@ ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COM
         }],
         generationConfig: {
           maxOutputTokens: 2000, // Increased to prevent truncation of longer exercises
+          // Gemini 2.5+ counts internal thinking tokens against maxOutputTokens.
+          thinkingConfig: { thinkingBudget: 0 },
           temperature: 1.4, // Maximum temperature (1.4) for maximum variation and creativity
           topP: 0.9, // Lower topP (0.9 instead of 0.95) to consider more diverse token options
           topK: 20, // Lower topK (20 instead of 40) to force more exploration of less likely tokens

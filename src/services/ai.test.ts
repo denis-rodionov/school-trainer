@@ -37,6 +37,9 @@ describe('ai service', () => {
 
     expect(result.markdown).toContain('data-answer="6"');
     expect(result.correctAnswers).toEqual(['6']);
+
+    const fetchBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(fetchBody.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
   });
 
   it('generateExercise throws on API error response', async () => {
