@@ -24,6 +24,72 @@ interface GenerateExerciseRequest {
   exerciseNumber: number;
 }
 
+interface ExercisePromptOptions {
+  randomSeed?: number;
+}
+
+/** Derive concrete number suggestions from a seed (computed in code, not shown to students). */
+export function deriveSuggestedNumbers(seed: number): number[] {
+  return [
+    (seed % 900) + 100,
+    ((Math.floor(seed / 7)) % 900) + 100,
+    ((seed * 3) % 900) + 100,
+    ((seed + 137) % 90) + 10,
+    (seed % 50) + 1,
+  ];
+}
+
+/** Build the Gemini system prompt for fill-gap exercise generation. */
+export function buildExerciseSystemPrompt(
+  request: GenerateExerciseRequest,
+  options: ExercisePromptOptions = {}
+): string {
+  const randomSeed = options.randomSeed ?? Math.floor(Math.random() * 1000000);
+  const suggestedNumbers = deriveSuggestedNumbers(randomSeed);
+
+  const diversityInstructions = [
+    'Generate a unique exercise with different content, wording, and structure.',
+    'This must differ from any previous exercise in content, values, and format.',
+    'Create a distinct exercise — change the examples, phrasing, and presentation.',
+  ];
+  const diversityInstruction =
+    diversityInstructions[request.exerciseNumber % diversityInstructions.length];
+
+  return `You are an educational exercise generator. Generate a single exercise based on the given prompt.
+
+Requirements:
+1. The exercise should be plain text (not HTML)
+2. Use ____ (four underscores) to indicate gaps that students need to fill
+3. After each gap, include the correct answer in parentheses: ____ (answer)
+4. The exercise can have one or more gaps
+5. Each gap must be followed by its correct answer in parentheses
+6. Make it clear and educational
+7. Return ONLY the exercise text with gaps marked as ____ (answer)
+8. ${diversityInstruction}
+9. Follow the topic prompt exactly — match its grade level, number ranges, and allowed operations
+10. Vary content and values from previous exercises, but stay within what the prompt allows
+
+Math exercises (when the prompt involves arithmetic):
+- Use ONLY the operations described in the topic prompt (e.g. if it says + and -, do not use ×, ÷, %, or powers)
+- Write simple expressions with literal numbers: "234 + 567 - 123 = ____ (678)"
+- Do NOT use nested parentheses, modulo (%), or multi-step formulas to pick numbers
+- Do NOT show random seeds, diversity hints, or number-selection formulas in the exercise
+- Numbers must match the prompt (e.g. "3-digit numbers" means 100–999, not six-digit values)
+
+Variety hint (internal only — do NOT include this seed or these hints in the exercise text):
+Suggested numbers for this exercise: ${suggestedNumbers.join(', ')}. Use these or other numbers that fit the prompt.
+
+Example formats (create your own variations that match the prompt):
+"5 + ____ (3) = 8"
+"234 + 567 - 123 = ____ (678)"
+"Fill in the blank: The capital of France is ____ (Paris)"
+"Complete: I ____ (am) a student."
+
+Generate exercise ${request.exerciseNumber} based on this prompt: ${request.prompt}
+
+Exercise #${request.exerciseNumber} | Suggested numbers: ${suggestedNumbers.join(', ')}`;
+}
+
 interface GeneratedExercise {
   markdown: string;
   correctAnswers: string[];
@@ -75,80 +141,7 @@ export const generateExercise = async (
     );
   }
 
-  // Generate randomization elements to encourage diversity
-  const randomSeed = Math.floor(Math.random() * 1000000);
-  const timestamp = Date.now();
-  const randomVariation = Math.floor(Math.random() * 100);
-  
-  // Create a "number selection strategy" based on exercise number and seed
-  const strategies = [
-    'Use numbers from different ranges - mix small, medium, and large numbers',
-    'Vary number patterns - use odd numbers, even numbers, prime numbers, composite numbers',
-    'Explore different number ranges - don\'t stick to the same range',
-    'Use the random seed to pick numbers - let it guide your selection',
-    'Vary number magnitudes - mix single digits, double digits, triple digits',
-  ];
-  const numberStrategy = strategies[request.exerciseNumber % strategies.length];
-  
-  // Vary the instruction phrasing to encourage different outputs
-  const diversityInstructions = [
-    'CRITICAL: Generate a UNIQUE exercise. Use different content, different wording, different structure.',
-    'IMPORTANT: This must be COMPLETELY DIFFERENT from any previous exercise. Vary all aspects: content, words, format, order.',
-    'ESSENTIAL: Create a DISTINCT exercise. Change the values/content, change the phrasing, change the approach.',
-    'REQUIRED: Generate a FRESH exercise. Use different examples, different content, different presentation style.',
-    'MANDATORY: Produce an ORIGINAL exercise. Vary content, vary structure, vary presentation completely.',
-  ];
-  const diversityInstruction = diversityInstructions[request.exerciseNumber % diversityInstructions.length];
-  
-  // Add variation hints based on exercise number and random seed
-  const variationHints = [
-    `Use variation pattern ${randomVariation}.`,
-    `Apply diversity modifier ${randomSeed % 1000}.`,
-    `Follow uniqueness rule ${request.exerciseNumber * 7 + randomVariation}.`,
-    `Use creative approach ${(request.exerciseNumber + randomSeed) % 50}.`,
-  ];
-  const variationHint = variationHints[request.exerciseNumber % variationHints.length];
-  
-  // Build the system prompt with enhanced diversity instructions (general for all subjects)
-  const systemPrompt = `You are an educational exercise generator. Generate a single exercise based on the given prompt.
-
-Requirements:
-1. The exercise should be plain text (not HTML)
-2. Use ____ (four underscores) to indicate gaps that students need to fill
-3. After each gap, include the correct answer in parentheses: ____ (answer)
-4. The exercise can have one or more gaps
-5. Each gap must be followed by its correct answer in parentheses
-6. Make it clear and educational
-7. Return ONLY the exercise text with gaps marked as ____ (answer)
-8. ${diversityInstruction}
-9. CRITICAL: Vary the content, values, words, and structure DRAMATICALLY from any previous exercises
-10. Use COMPLETELY different examples, different word choices, different sentence structures, different contexts
-11. AVOID repeating the same content, same values, same wording, or same structure - even if they fit the prompt
-12. Be CREATIVE and ORIGINAL - each exercise should feel completely fresh and unique
-13. If using numbers: ${numberStrategy}. Use the random seed ${randomSeed} to select numbers - convert it to guide your number choices (e.g., use seed mod 100, or seed/1000, or other transformations). EXPLORE the full range of valid numbers - don't repeat the same numbers from previous exercises.
-14. If using words, use DIFFERENT vocabulary, different sentence patterns, different contexts
-15. ${variationHint}
-16. Think RANDOMLY and UNPREDICTABLY - surprise yourself with unusual choices that still fit the prompt
-17. CRITICAL: Use the random seed ${randomSeed} actively - transform it mathematically to select different numbers/words. For example: (seed % 100), (seed / 1000), (seed * 7 % 50), etc. This ensures each exercise uses different values.
-
-Example formats (DO NOT copy these exactly - create your own variations):
-"5 + ____ (3) = 8"
-"4+2=____ (6)"
-"Fill in the blank: The capital of France is ____ (Paris)"
-"Complete: I ____ (am) a student."
-"Der ____ (Hund) ist braun."
-"Translate: I am ____ (ich bin) a student."
-
-Generate exercise ${request.exerciseNumber} based on this prompt: ${request.prompt}
-
-Diversity seed: ${randomSeed} | Timestamp: ${timestamp} | Variation: ${randomVariation}
-ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COMPLETELY DIFFERENT from exercise ${request.exerciseNumber - 1} and ANY other exercise. 
-- Use DIFFERENT content, DIFFERENT words, DIFFERENT structure
-- If using numbers: USE THE RANDOM SEED ${randomSeed} to mathematically derive your numbers. Transform the seed: try (seed % 100), (seed / 1000 % 50), (seed * 3 % 99), etc. This ensures you use DIFFERENT numbers each time. EXPLORE the full valid range - don't stick to the same few numbers.
-- If using words, use DIFFERENT vocabulary and sentence patterns
-- Be UNPREDICTABLE and CREATIVE - make unexpected choices that still follow the prompt requirements
-- Think outside the box - surprise with variety
-- Number selection: Use mathematical transformations of seed ${randomSeed} to pick numbers. Example: if seed=123456, try 123456%100=56, but also try 123456/1000%50=23, or 123456*7%99=84. Vary the transformation formula each time.`;
+  const systemPrompt = buildExerciseSystemPrompt(request);
 
   // Get model name and API version from environment variables or use defaults
   // Using gemini-2.5-flash (cheapest Flash model, newest version) with v1beta API
@@ -173,9 +166,9 @@ ANTI-REPETITION RULE: This is exercise ${request.exerciseNumber}. It MUST be COM
           maxOutputTokens: 2000, // Increased to prevent truncation of longer exercises
           // Gemini 2.5+ counts internal thinking tokens against maxOutputTokens.
           thinkingConfig: { thinkingBudget: 0 },
-          temperature: 1.4, // Maximum temperature (1.4) for maximum variation and creativity
-          topP: 0.9, // Lower topP (0.9 instead of 0.95) to consider more diverse token options
-          topK: 20, // Lower topK (20 instead of 40) to force more exploration of less likely tokens
+          temperature: 1.0,
+          topP: 0.95,
+          topK: 40,
         },
       }),
     });

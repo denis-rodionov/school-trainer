@@ -1,4 +1,5 @@
 import { validateAndConvertToHtmlMarkdown } from '../utils/aiMarkdownConverter';
+import { buildExerciseSystemPrompt, deriveSuggestedNumbers } from './ai';
 
 const originalFetch = global.fetch;
 const originalEnv = process.env;
@@ -12,6 +13,38 @@ function mockGeminiResponse(text: string) {
     }),
   };
 }
+
+describe('buildExerciseSystemPrompt', () => {
+  it('pre-computes suggested numbers instead of asking the model to show seed formulas', () => {
+    const prompt = buildExerciseSystemPrompt(
+      { prompt: '3-digit addition', topicName: 'Math', exerciseNumber: 1 },
+      { randomSeed: 586000 }
+    );
+
+    expect(prompt).toContain('Suggested numbers for this exercise:');
+    expect(prompt).toContain(deriveSuggestedNumbers(586000).join(', '));
+    expect(prompt).not.toMatch(/seed % 100/i);
+    expect(prompt).not.toMatch(/transform it mathematically/i);
+    expect(prompt).not.toMatch(/Diversity seed:/i);
+  });
+
+  it('requires math exercises to match prompt difficulty and forbid modulo formulas', () => {
+    const prompt = buildExerciseSystemPrompt(
+      { prompt: 'addition and subtraction', topicName: 'Math', exerciseNumber: 2 },
+      { randomSeed: 12345 }
+    );
+
+    expect(prompt).toMatch(/ONLY the operations described in the topic prompt/i);
+    expect(prompt).toMatch(/Do NOT use nested parentheses, modulo/i);
+    expect(prompt).toMatch(/literal numbers/i);
+  });
+});
+
+describe('deriveSuggestedNumbers', () => {
+  it('returns five concrete numbers from a seed', () => {
+    expect(deriveSuggestedNumbers(586000)).toEqual([200, 114, 400, 67, 1]);
+  });
+});
 
 describe('ai service', () => {
   beforeEach(() => {
@@ -40,6 +73,8 @@ describe('ai service', () => {
 
     const fetchBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
     expect(fetchBody.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    expect(fetchBody.generationConfig.temperature).toBe(1.0);
+    expect(fetchBody.contents[0].parts[0].text).not.toMatch(/seed % 100/i);
   });
 
   it('generateExercise throws on API error response', async () => {
