@@ -62,3 +62,18 @@ export const sampleDictationTopic: Topic = {
   defaultExerciseCount: 3,
   type: 'DICTATION',
 };
+
+export const sampleReadingTopic: Topic = {
+  id: 'topic-3',
+  subject: 'german',
+  shortName: 'Grimm',
+  taskDescription: 'Read the text and answer the questions',
+  prompt: '',
+  createdAt: { seconds: 0, nanoseconds: 0 } as Topic['createdAt'],
+  createdBy: 'trainer-1',
+  defaultExerciseCount: 1,
+  type: 'READING',
+  bookId: 'grimm',
+  questionCount: 2,
+  fragmentWords: 100,
+};

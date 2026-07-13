@@ -124,7 +124,13 @@ const AssignTopicsDialog: React.FC<AssignTopicsDialogProps> = ({
       const currentSubjectAssignments = subjectData?.topicAssignments || [];
       const updatedAssignments = [
         ...currentSubjectAssignments.filter((a) => a.topicId !== topic.id),
-        { topicId: topic.id, count },
+        {
+          topicId: topic.id,
+          count,
+          ...(topic.type === 'READING'
+            ? { readingPosition: topic.bookStartParagraph ?? 0 }
+            : {}),
+        },
       ];
 
       if (subjectData) {

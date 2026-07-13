@@ -7,5 +7,10 @@ service firebase.storage {
     match /dictation/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
+
+    // Reading books (epub): authenticated users can read; uploads done out-of-band by admin
+    match /books/{allPaths=**} {
+      allow read: if request.auth != null;
+    }
   }
 }

@@ -1,6 +1,20 @@
 import { Worksheet, Exercise, Topic } from '../types';
 import { parseMarkdown, extractAudioUrl } from '../utils/markdownParser';
+import {
+  isReadingMarkdown,
+  extractReadingPrev,
+  extractReadingFragment,
+  extractReadingQuestions,
+} from '../utils/readingParser';
 import { format } from 'date-fns';
+
+const escapeHtml = (text: string): string =>
+  text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 interface PrintWorksheetOptions {
   worksheet: Worksheet;
@@ -26,7 +40,32 @@ const convertMarkdownToPrintHtml = (markdown: string, exercise?: Exercise): stri
     // For dictation: show audio icon indicator only, no correct text
     return '<span class="dictation-indicator">🎧 [Audio Dictation]</span>';
   }
-  
+
+  // For reading: show previous paragraph (gray), fragment, and questions with lettered options
+  if (isReadingMarkdown(markdown)) {
+    const prev = extractReadingPrev(markdown);
+    const fragment = extractReadingFragment(markdown);
+    const questions = extractReadingQuestions(markdown);
+
+    const prevHtml = prev
+      ? `<p class="reading-prev">${escapeHtml(prev)}</p>`
+      : '';
+    const fragmentHtml = fragment.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
+    const questionsHtml = questions
+      .map((q, qi) => {
+        const optionsHtml = q.options
+          .map((opt, oi) => {
+            const letter = String.fromCharCode(65 + oi);
+            return `<div class="reading-option">◯ ${letter}) ${escapeHtml(opt)}</div>`;
+          })
+          .join('');
+        return `<div class="reading-question"><strong>${qi + 1}. ${escapeHtml(q.question)}</strong>${optionsHtml}</div>`;
+      })
+      .join('');
+
+    return `<div class="reading-print">${prevHtml}${fragmentHtml}${questionsHtml}</div>`;
+  }
+
   // For fill gaps: parse and show gaps
   const parsed = parseMarkdown(markdown);
   let html = '';
@@ -220,6 +259,25 @@ export const generatePrintHtml = ({
             font-size: 16px;
             font-weight: bold;
             margin-top: 3px;
+          }
+
+          .reading-print p {
+            margin: 0 0 6px 0;
+            font-size: 13px;
+          }
+
+          .reading-prev {
+            color: #999 !important;
+            font-style: italic;
+          }
+
+          .reading-question {
+            margin-top: 8px;
+            font-size: 13px;
+          }
+
+          .reading-option {
+            margin: 2px 0 2px 12px;
           }
           
           @page {

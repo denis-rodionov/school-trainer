@@ -1,10 +1,22 @@
 # Deploying Storage Rules (Workaround for App Engine Error)
 
 ## Current Setup
-Storage rules are **excluded from `firebase.json`** to avoid App Engine errors. This allows `firebase deploy` to work normally for Firestore and Hosting.
+`storage.rules` is wired in `firebase.json`. Deploy with:
 
-## Problem
-When running `firebase deploy` with storage rules in `firebase.json`, you may encounter:
+```bash
+firebase deploy --only storage
+```
+
+For routine deploys (Firestore + Hosting only), use:
+
+```bash
+firebase deploy --only firestore,hosting
+```
+
+This avoids pulling Storage into a full `firebase deploy` if you hit the App Engine error below.
+
+## Problem (CLI full deploy)
+When running `firebase deploy` (all targets) with storage in `firebase.json`, you may encounter:
 ```
 Error: HTTP Error: 404, Resource 'projects/school-trainer-70cb5/locations/global/applications/school-trainer-70cb5' was not found
 ```
@@ -22,41 +34,76 @@ Copy the contents of `storage.rules` file:
 
 ```rules
 rules_version = '2';
-// Firebase Storage rules — deploy with: firebase deploy --only storage
-// Required for dictation audio uploads from the web app (including localhost).
+// Firebase Storage rules — deploy via Firebase Console (see below)
+// Required for dictation audio and reading books from the web app (including localhost).
 service firebase.storage {
   match /b/{bucket}/o {
     // Dictation audio: authenticated users can read/write (trainers generate, students read)
     match /dictation/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
+
+    // Reading books (epub): authenticated users can read; uploads done out-of-band by admin
+    match /books/{allPaths=**} {
+      allow read: if request.auth != null;
+    }
   }
 }
 ```
 
-### Step 3: Paste and Deploy
+### Step 3: Upload books (reading exercises)
+1. In Firebase Console → **Storage** → **Files**, create folder `books/` if needed
+2. Upload `.epub` files (e.g. `grimm.epub` from the repo `books/` folder)
+3. Or from the command line (with `gcloud`/`gsutil` authenticated):
+   ```bash
+   ./scripts/upload-books.sh
+   ```
+
+### Step 4: Paste and Deploy rules
 1. Paste the rules into the editor in Firebase Console
 2. Click **Publish**
 
-### Step 4: Deploy Other Services (Firestore, Hosting)
-Since storage is excluded from `firebase.json`, you can deploy everything else with:
+**Or via CLI** (after `firebase.json` includes the `storage` section):
 
 ```bash
-firebase deploy
+firebase deploy --only storage
 ```
 
-This will deploy Firestore rules and Hosting without trying to deploy storage.
+### Step 5: Sync books for the app (reading exercises)
+
+The app serves epubs from `public/books/` (same origin — no Storage CORS). Before dev or build:
+
+```bash
+npm run copy:books
+```
+
+This runs automatically on `npm start` and `npm run build`. Source files live in repo `books/`; optional upload to Storage is for backup only (`./scripts/upload-books.sh`).
+
+### Step 6: Configure CORS (dictation audio uploads only)
+
+CORS on the Storage bucket is required for **dictation audio uploads** from the browser, not for reading book downloads.
+
+```bash
+gcloud auth login   # once
+npm run storage:cors
+```
+
+### Step 7: Deploy Other Services (Firestore, Hosting)
+
+Deploy Firestore rules and Hosting (books are bundled via `prebuild` → `public/books/`):
+
+```bash
+firebase deploy --only firestore,hosting
+```
 
 ### If You Need to Deploy Storage Rules via CLI
-If you need to deploy storage rules via CLI in the future, temporarily add the storage section back to `firebase.json`:
+Storage is already in `firebase.json`. Run:
 
-```json
-"storage": {
-  "rules": "storage.rules"
-}
+```bash
+firebase deploy --only storage
 ```
 
-Then deploy with: `firebase deploy --only storage` (or set up App Engine to use `firebase deploy`).
+If that fails with an App Engine 404, use the Console steps above or set up App Engine (requires billing):
 
 ## Alternative: Set Up App Engine (Requires Billing)
 

@@ -27,3 +27,7 @@ yarn-error.log*
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+
+# Local dev copies of epubs (source of truth: books/)
+public/books/*.epub
+public/books/manifest.json

@@ -29,17 +29,59 @@ import { getTopic } from '../../services/topics';
 import { Worksheet, Exercise } from '../../types';
 import ExerciseBlock from './ExerciseBlock';
 import DictationExerciseBlock from './DictationExerciseBlock';
+import ReadingExerciseBlock from './ReadingExerciseBlock';
 import { transformMarkdownWithAnswers, extractCorrectAnswers, extractAudioUrl, extractDraftAnswers, updateMarkdownWithDraftAnswers } from '../../utils/markdownParser';
 import { extractDictationAnswer } from '../../utils/dictationParser';
+import {
+  isReadingMarkdown,
+  extractReadingQuestions,
+  extractReadingSelections,
+  updateReadingMarkdownWithSelections,
+  extractReadingRange,
+} from '../../utils/readingParser';
 import { fuzzyMatchText, getWordLevelDifferences } from '../../utils/dictationScoring';
 import { computeWorksheetScore, computeWorksheetScoreFromMistakes } from '../../utils/worksheetScoring';
 import {
   getSubjectData,
+  updateSubjectReadingPosition,
 } from '../../services/users';
-import { generateExerciseForTopic } from '../../services/exerciseGenerator';
+import { generateExerciseForTopic, isTopicReady, readingPositionFor } from '../../services/exerciseGenerator';
 import { printWorksheet } from '../../services/printing';
 import { firestoreRead } from '../../utils/firestoreResilience';
 import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
+
+// Helper: check if an exercise is a dictation exercise (audio or dictation markdown structure)
+const isDictationExercise = (exercise: Exercise): boolean => {
+  const md = exercise.markdown ?? '';
+  if (exercise.audioUrl || extractAudioUrl(md)) return true;
+  // Markdown with textarea data-answer (dictation) even without audio
+  return /<textarea[^>]*data-answer=["']/i.test(md);
+};
+
+// Helper: check if an exercise is a reading exercise
+const isReadingExercise = (exercise: Exercise): boolean =>
+  isReadingMarkdown(exercise.markdown ?? '');
+
+// Number of answer slots an exercise contributes to the flat `answers` array.
+const answerSlotCount = (exercise: Exercise): number => {
+  if (isReadingExercise(exercise)) return extractReadingQuestions(exercise.markdown ?? '').length;
+  if (isDictationExercise(exercise)) return 1;
+  return extractCorrectAnswers(exercise.markdown ?? '').length;
+};
+
+// Extract the current draft answers stored in an exercise's markdown.
+const getExerciseDraftAnswers = (exercise: Exercise): string[] => {
+  if (isReadingExercise(exercise)) return extractReadingSelections(exercise.markdown ?? '');
+  return extractDraftAnswers(exercise.markdown ?? '');
+};
+
+// Persist draft answers back into an exercise's markdown.
+const updateExerciseDraftMarkdown = (exercise: Exercise, draftAnswers: string[]): string => {
+  if (isReadingExercise(exercise)) {
+    return updateReadingMarkdownWithSelections(exercise.markdown ?? '', draftAnswers);
+  }
+  return updateMarkdownWithDraftAnswers(exercise.markdown ?? '', draftAnswers);
+};
 
 const WorksheetScreen: React.FC = () => {
   const { worksheetId } = useParams<{ worksheetId: string }>();
@@ -73,14 +115,6 @@ const WorksheetScreen: React.FC = () => {
   const isPending = worksheet?.status === 'pending';
   const isReviewMode = isTrainer && isPending; // Trainer reviewing a pending worksheet
   const isReadOnly = (isTrainer && !isReviewMode) || isCompleted; // Read-only unless trainer is in review mode
-
-  // Helper function to check if an exercise is a dictation exercise (audio or dictation markdown structure)
-  const isDictationExercise = (exercise: Exercise): boolean => {
-    const md = exercise.markdown ?? '';
-    if (exercise.audioUrl || extractAudioUrl(md)) return true;
-    // Markdown with textarea data-answer (dictation) even without audio
-    return /<textarea[^>]*data-answer=["']/i.test(md);
-  };
 
   const loadWorksheet = useCallback(async () => {
     if (!worksheetId) return;
@@ -121,13 +155,7 @@ const WorksheetScreen: React.FC = () => {
       }
       setTopicsMap(topics);
 
-      const totalGaps = sortedExercises.reduce((sum, ex) => {
-        if (isDictationExercise(ex)) {
-          return sum + 1;
-        }
-        const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
-        return sum + correctAnswers.length;
-      }, 0);
+      const totalGaps = sortedExercises.reduce((sum, ex) => sum + answerSlotCount(ex), 0);
 
       setAttempts(new Array(sortedExercises.length).fill(1));
       setPreviousAnswers(new Array(sortedExercises.length).fill([]).map(() => []));
@@ -137,24 +165,22 @@ const WorksheetScreen: React.FC = () => {
       const initialAnswers = new Array(totalGaps).fill('');
       let answerSlot = 0;
       for (const ex of sortedExercises) {
+        const count = answerSlotCount(ex);
+        const draftAnswers = getExerciseDraftAnswers(ex);
         if (isDictationExercise(ex)) {
-          const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
           if (draftAnswers.length > 0 && draftAnswers[0]) {
             initialAnswers[answerSlot] = draftAnswers[0];
           } else if (ex.userInput != null && ex.userInput !== '') {
             initialAnswers[answerSlot] = ex.userInput;
           }
-          answerSlot += 1;
         } else {
-          const draftAnswers = extractDraftAnswers(ex.markdown ?? '');
-          const correctAnswers = extractCorrectAnswers(ex.markdown ?? '');
-          for (let i = 0; i < correctAnswers.length; i++) {
+          for (let i = 0; i < count; i++) {
             if (draftAnswers[i]) {
               initialAnswers[answerSlot + i] = draftAnswers[i];
             }
           }
-          answerSlot += correctAnswers.length;
         }
+        answerSlot += count;
       }
       setAnswers(initialAnswers);
       answersRef.current = initialAnswers;
@@ -198,30 +224,20 @@ const WorksheetScreen: React.FC = () => {
             if (ex.id === currentExercise.id) {
               break;
             }
-            if (isDictationExercise(ex)) {
-              answerStart += 1;
-            } else {
-              answerStart += extractCorrectAnswers(ex.markdown ?? '').length;
-            }
+            answerStart += answerSlotCount(ex);
           }
 
           // Get current answers from ref (always up-to-date)
           const currentAnswers = answersRef.current;
-          
+
           // Extract answers
-          let exerciseDraftAnswers: string[] = [];
-          if (isDictationExercise(currentExercise)) {
-            exerciseDraftAnswers = [currentAnswers[answerStart] || ''];
-          } else {
-            const correctAnswers = extractCorrectAnswers(currentExercise.markdown ?? '');
-            exerciseDraftAnswers = currentAnswers.slice(answerStart, answerStart + correctAnswers.length);
-          }
+          const count = answerSlotCount(currentExercise);
+          const exerciseDraftAnswers = isDictationExercise(currentExercise)
+            ? [currentAnswers[answerStart] || '']
+            : currentAnswers.slice(answerStart, answerStart + count);
 
           // Update markdown
-          const updatedMarkdown = updateMarkdownWithDraftAnswers(
-            currentExercise.markdown ?? '',
-            exerciseDraftAnswers
-          );
+          const updatedMarkdown = updateExerciseDraftMarkdown(currentExercise, exerciseDraftAnswers);
 
           // Log before saving
           console.log('saving exercise', updatedMarkdown);
@@ -265,19 +281,13 @@ const WorksheetScreen: React.FC = () => {
     if (exercise) {
       try {
         // Extract answers for this exercise
-        let exerciseDraftAnswers: string[] = [];
-        if (isDictationExercise(exercise)) {
-          exerciseDraftAnswers = [answers[answerStartIndex] || ''];
-        } else {
-          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-          exerciseDraftAnswers = answers.slice(answerStartIndex, answerStartIndex + correctAnswers.length);
-        }
+        const count = answerSlotCount(exercise);
+        const exerciseDraftAnswers = isDictationExercise(exercise)
+          ? [answers[answerStartIndex] || '']
+          : answers.slice(answerStartIndex, answerStartIndex + count);
 
         // Update markdown with draft answers
-        const updatedMarkdown = updateMarkdownWithDraftAnswers(
-          exercise.markdown ?? '',
-          exerciseDraftAnswers
-        );
+        const updatedMarkdown = updateExerciseDraftMarkdown(exercise, exerciseDraftAnswers);
 
         // Log before saving
         console.log('saving exercise', updatedMarkdown);
@@ -308,21 +318,13 @@ const WorksheetScreen: React.FC = () => {
     let answerIndex = 0;
 
     for (const exercise of exercises) {
-      let exerciseDraftAnswers: string[] = [];
+      const count = answerSlotCount(exercise);
+      const exerciseDraftAnswers = isDictationExercise(exercise)
+        ? [answers[answerIndex] || '']
+        : answers.slice(answerIndex, answerIndex + count);
+      answerIndex += count;
 
-      if (isDictationExercise(exercise)) {
-        exerciseDraftAnswers = [answers[answerIndex] || ''];
-        answerIndex += 1;
-      } else {
-        const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-        exerciseDraftAnswers = answers.slice(answerIndex, answerIndex + correctAnswers.length);
-        answerIndex += correctAnswers.length;
-      }
-
-      const updatedMarkdown = updateMarkdownWithDraftAnswers(
-        exercise.markdown ?? '',
-        exerciseDraftAnswers
-      );
+      const updatedMarkdown = updateExerciseDraftMarkdown(exercise, exerciseDraftAnswers);
 
       await updateExercise(worksheet.id, exercise.id, {
         markdown: updatedMarkdown,
@@ -345,7 +347,21 @@ const WorksheetScreen: React.FC = () => {
     exercises.forEach((exercise, exerciseIndex) => {
       let exerciseHasError = false;
 
-      if (isDictationExercise(exercise)) {
+      if (isReadingExercise(exercise)) {
+        const questions = extractReadingQuestions(exercise.markdown ?? '');
+        questions.forEach((question) => {
+          const userAnswer = answers[globalIndex] ?? '';
+          const isError = userAnswer === '' || parseInt(userAnswer, 10) !== question.correctIndex;
+          newErrors[globalIndex] = isError;
+
+          if (isError) {
+            totalMistakes += 1;
+            exerciseHasError = true;
+            allCorrect = false;
+          }
+          globalIndex++;
+        });
+      } else if (isDictationExercise(exercise)) {
         const correctAnswer = extractDictationAnswer(exercise.markdown);
         const userAnswer = answers[globalIndex] || '';
         const isError = !fuzzyMatchText(userAnswer, correctAnswer);
@@ -391,18 +407,12 @@ const WorksheetScreen: React.FC = () => {
 
       let tempGlobalIndex = 0;
       exercises.forEach((exercise, exerciseIndex) => {
+        const count = answerSlotCount(exercise);
         if (exercisesWithMistakesSet.has(exercise.id)) {
           const exerciseAnswers: string[] = [];
-
-          if (isDictationExercise(exercise)) {
+          for (let k = 0; k < count; k++) {
             exerciseAnswers.push(answers[tempGlobalIndex] || '');
             tempGlobalIndex++;
-          } else {
-            const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-            correctAnswers.forEach(() => {
-              exerciseAnswers.push(answers[tempGlobalIndex] || '');
-              tempGlobalIndex++;
-            });
           }
 
           const newPreviousAnswers = [...previousAnswers];
@@ -412,11 +422,8 @@ const WorksheetScreen: React.FC = () => {
           const newAttempts = [...attempts];
           newAttempts[exerciseIndex] = (newAttempts[exerciseIndex] || 1) + 1;
           setAttempts(newAttempts);
-        } else if (isDictationExercise(exercise)) {
-          tempGlobalIndex++;
         } else {
-          const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-          tempGlobalIndex += correctAnswers.length;
+          tempGlobalIndex += count;
         }
       });
 
@@ -454,7 +461,10 @@ const WorksheetScreen: React.FC = () => {
         let userInput: string | null = null;
 
         if (attempt > 1) {
-          if (isDictationExercise(exercise)) {
+          if (isReadingExercise(exercise)) {
+            // Reading selections are already persisted in markdown; no separate userInput.
+            userInput = null;
+          } else if (isDictationExercise(exercise)) {
             userInput = lastIncorrectAttempt[0] || null;
           } else {
             userInput = transformMarkdownWithAnswers(exercise.markdown ?? '', lastIncorrectAttempt);
@@ -482,6 +492,22 @@ const WorksheetScreen: React.FC = () => {
 
       await saveAllExerciseDrafts();
       await completeWorksheet(worksheet.id, score);
+
+      // Advance reading position per topic (only forward) for any READING exercises.
+      const readingEndByTopic = new Map<string, number>();
+      for (const exercise of exercises) {
+        if (!isReadingExercise(exercise)) continue;
+        const range = extractReadingRange(exercise.markdown ?? '');
+        if (!range) continue;
+        const prevMax = readingEndByTopic.get(exercise.topicId) ?? 0;
+        readingEndByTopic.set(exercise.topicId, Math.max(prevMax, range.endIndex));
+      }
+      for (const [topicId, endIndex] of Array.from(readingEndByTopic.entries())) {
+        const topic = topicsMap[topicId] || (await getTopic(topicId));
+        if (topic) {
+          await updateSubjectReadingPosition(worksheet.studentId, topic.subject, topicId, endIndex);
+        }
+      }
 
       if (exercises.length > 0) {
         const firstExercise = exercises[0];
@@ -644,7 +670,7 @@ const WorksheetScreen: React.FC = () => {
       // Calculate total number of exercises to generate
       const totalExercises = subjectData.topicAssignments.reduce((sum, assignment) => {
         const topic = topicsMap.get(assignment.topicId);
-        return topic && topic.prompt ? sum + assignment.count : sum;
+        return isTopicReady(topic) ? sum + assignment.count : sum;
       }, 0);
 
       // Generate new exercises from topic assignments using AI
@@ -654,14 +680,14 @@ const WorksheetScreen: React.FC = () => {
 
       for (const assignment of subjectData.topicAssignments) {
         const topic = topicsMap.get(assignment.topicId);
-        if (!topic || !topic.prompt) continue;
+        if (!isTopicReady(topic) || !topic) continue;
 
         // Capture current values for the callback
         const capturedExerciseIndex = currentExerciseIndex;
         const capturedExerciseOrder = exerciseOrder;
 
         try {
-          // Generate exercises using the orchestrator (handles both FILL_GAPS and DICTATION)
+          // Generate exercises using the orchestrator (handles FILL_GAPS, DICTATION, READING)
           const generatedExercises = await generateExerciseForTopic(
             topic,
             assignment.count,
@@ -671,7 +697,8 @@ const WorksheetScreen: React.FC = () => {
                 current: capturedExerciseIndex + current,
                 total: totalExercises,
               });
-            }
+            },
+            readingPositionFor(assignment.readingPosition, topic.bookStartParagraph)
           );
 
           // Add generated exercises (already in correct format)
@@ -834,12 +861,7 @@ const WorksheetScreen: React.FC = () => {
           if (ex.topicId === topicId) {
             break;
           }
-          if (isDictationExercise(ex)) {
-            globalAnswerIndex += 1; // Dictation exercises have 1 answer
-          } else {
-            const exCorrectAnswers = extractCorrectAnswers(ex.markdown ?? '');
-            globalAnswerIndex += exCorrectAnswers.length;
-          }
+          globalAnswerIndex += answerSlotCount(ex);
         }
 
         return (
@@ -849,35 +871,47 @@ const WorksheetScreen: React.FC = () => {
             </Typography>
             {topicExercises.map((exercise) => {
               const isDictation = isDictationExercise(exercise);
+              const isReading = isReadingExercise(exercise);
               const exerciseAnswerStart = globalAnswerIndex;
-              
+              const slotCount = answerSlotCount(exercise);
+
               let exerciseAnswers: string[];
               let exerciseErrors: boolean[];
-              
+
               if (isDictation) {
                 // Dictation: single answer
                 exerciseAnswers = [answers[exerciseAnswerStart] || ''];
                 exerciseErrors = [errors[exerciseAnswerStart] || false];
                 globalAnswerIndex += 1;
               } else {
-                // Fill gaps: multiple answers
-                const exerciseCorrectAnswers = extractCorrectAnswers(exercise.markdown ?? '');
-                exerciseAnswers = answers.slice(
-                  exerciseAnswerStart,
-                  exerciseAnswerStart + exerciseCorrectAnswers.length
-                );
-                exerciseErrors = errors.slice(
-                  exerciseAnswerStart,
-                  exerciseAnswerStart + exerciseCorrectAnswers.length
-                );
-                globalAnswerIndex += exerciseCorrectAnswers.length;
+                // Fill gaps / reading: multiple answers
+                exerciseAnswers = answers.slice(exerciseAnswerStart, exerciseAnswerStart + slotCount);
+                exerciseErrors = errors.slice(exerciseAnswerStart, exerciseAnswerStart + slotCount);
+                globalAnswerIndex += slotCount;
               }
 
               // Check if this exercise is marked as having an error
               const isExerciseMarkedAsError = trainerMarkedErrors.has(exercise.id);
 
               // Render appropriate component based on exercise type
-              if (isDictation) {
+              if (isReading) {
+                return (
+                  <ReadingExerciseBlock
+                    key={exercise.id}
+                    exercise={{ ...exercise, markdown: exercise.markdown ?? '' }}
+                    answers={exerciseAnswers}
+                    onAnswerChange={(questionIndex, value) =>
+                      handleAnswerChange(exerciseAnswerStart + questionIndex, value)
+                    }
+                    errors={exerciseErrors}
+                    isReadOnly={isReadOnly}
+                    showCorrectAnswers={isTrainer}
+                    isCompleted={isCompleted}
+                    onExerciseFocus={() => handleExerciseFocus(exercise.id)}
+                    onExerciseBlur={() => handleExerciseBlur(exercise.id, exerciseAnswerStart)}
+                  />
+                );
+              } else if (isDictation) {
                 return (
                   <DictationExerciseBlock
                     key={exercise.id}

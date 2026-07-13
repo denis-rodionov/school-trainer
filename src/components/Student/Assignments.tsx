@@ -27,7 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { translateSubject } from '../../i18n/translations';
-import { generateExerciseForTopic } from '../../services/exerciseGenerator';
+import { generateExerciseForTopic, isTopicReady, readingPositionFor } from '../../services/exerciseGenerator';
 import { firestoreRead } from '../../utils/firestoreResilience';
 import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
 import GutscheinPanel from '../Trainer/GutscheinPanel';
@@ -129,7 +129,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
       // Calculate total number of exercises to generate
       const totalExercises = subjectData.topicAssignments.reduce((sum, assignment) => {
         const topic = topics.get(assignment.topicId);
-        return topic && topic.prompt ? sum + assignment.count : sum;
+        return isTopicReady(topic) ? sum + assignment.count : sum;
       }, 0);
 
       // Create exercises from topic assignments using AI generation
@@ -139,14 +139,14 @@ const Assignments: React.FC<AssignmentsProps> = ({
 
       for (const assignment of subjectData.topicAssignments) {
         const topic = topics.get(assignment.topicId);
-        if (!topic || !topic.prompt) continue;
+        if (!isTopicReady(topic) || !topic) continue;
 
         // Capture current values for the callback
         const capturedExerciseIndex = currentExerciseIndex;
         const capturedExerciseOrder = exerciseOrder;
 
         try {
-          // Generate exercises using the orchestrator (handles both FILL_GAPS and DICTATION)
+          // Generate exercises using the orchestrator (handles FILL_GAPS, DICTATION, READING)
           const generatedExercises = await generateExerciseForTopic(
             topic,
             assignment.count,
@@ -156,7 +156,8 @@ const Assignments: React.FC<AssignmentsProps> = ({
                 current: capturedExerciseIndex + current,
                 total: totalExercises,
               });
-            }
+            },
+            readingPositionFor(assignment.readingPosition, topic.bookStartParagraph)
           );
 
           // Add generated exercises (already in correct format)

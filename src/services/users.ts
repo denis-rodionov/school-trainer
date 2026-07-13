@@ -155,6 +155,39 @@ export const updateSubjectTopicAssignments = async (
   await updateDoc(subjectRef, { topicAssignments });
 };
 
+/**
+ * Advance the stored reading position for a specific topic assignment.
+ * Only moves forward (never regresses), so replaying an earlier worksheet won't rewind.
+ */
+export const updateSubjectReadingPosition = async (
+  uid: string,
+  subject: Subject,
+  topicId: string,
+  position: number
+): Promise<void> => {
+  const subjectRef = doc(db, 'users', uid, 'subjects', subject);
+  const currentDoc = await getDoc(subjectRef);
+  if (!currentDoc.exists()) return;
+
+  const data = currentDoc.data();
+  const assignments: TopicAssignment[] = Array.isArray(data.topicAssignments)
+    ? data.topicAssignments
+    : [];
+
+  let changed = false;
+  const updated = assignments.map((assignment) => {
+    if (assignment.topicId !== topicId) return assignment;
+    const current = typeof assignment.readingPosition === 'number' ? assignment.readingPosition : 0;
+    if (position <= current) return assignment;
+    changed = true;
+    return { ...assignment, readingPosition: position };
+  });
+
+  if (changed) {
+    await updateDoc(subjectRef, { topicAssignments: updated });
+  }
+};
+
 export const getUserSubjects = async (uid: string): Promise<Subject[]> => {
   const subjectsSnapshot = await getDocs(collection(db, 'users', uid, 'subjects'));
   return subjectsSnapshot.docs.map((doc) => doc.id);

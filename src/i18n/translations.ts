@@ -94,6 +94,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'topics.type': 'Exercise Type',
     'topics.typeFillGaps': 'Fill Gaps',
     'topics.typeDictation': 'Dictation',
+    'topics.typeReading': 'Reading',
+    'topics.book': 'Book',
+    'topics.questionCount': 'Number of questions',
+    'topics.fragmentWords': 'Fragment length (words)',
+    'topics.bookStartParagraph': 'Start paragraph',
+    'topics.bookStartParagraphHelp': 'Paragraph index where the story begins (skip title pages and metadata). 0 = first paragraph.',
+    'topics.booksEmpty': 'No books found in Storage. Upload .epub files to the books/ folder (see docs/DEPLOY_STORAGE_RULES.md).',
+    'topics.booksLoadFailed': 'Failed to load books from Storage.',
     
     // Students
     'students.title': 'Students',
@@ -141,6 +149,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'validation.shortNameRequired': 'Short name is required',
     'validation.taskDescriptionRequired': 'Task description is required',
     'validation.promptRequired': 'Prompt is required',
+    'validation.bookRequired': 'Please choose a book',
     'validation.enterPromptFirst': 'Please enter a prompt first',
     'validation.enterShortNameFirst': 'Please enter a short name first',
     
@@ -308,6 +317,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'topics.type': 'Тип упражнения',
     'topics.typeFillGaps': 'Заполнить пропуски',
     'topics.typeDictation': 'Диктант',
+    'topics.typeReading': 'Чтение',
+    'topics.book': 'Книга',
+    'topics.questionCount': 'Количество вопросов',
+    'topics.fragmentWords': 'Длина фрагмента (слова)',
+    'topics.bookStartParagraph': 'Начальный абзац',
+    'topics.bookStartParagraphHelp': 'Номер абзаца, с которого начинается текст (пропустить титул и метаданные). 0 = первый абзац.',
+    'topics.booksEmpty': 'Книги не найдены в Storage. Загрузите .epub в папку books/ (см. docs/DEPLOY_STORAGE_RULES.md).',
+    'topics.booksLoadFailed': 'Не удалось загрузить список книг из Storage.',
     
     // Students
     'students.title': 'Студенты',
@@ -355,6 +372,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'validation.shortNameRequired': 'Краткое название обязательно',
     'validation.taskDescriptionRequired': 'Описание задания обязательно',
     'validation.promptRequired': 'Подсказка обязательна',
+    'validation.bookRequired': 'Пожалуйста, выберите книгу',
     'validation.enterPromptFirst': 'Пожалуйста, сначала введите подсказку',
     'validation.enterShortNameFirst': 'Пожалуйста, сначала введите краткое название',
     
@@ -522,6 +540,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'topics.type': 'Übungstyp',
     'topics.typeFillGaps': 'Lücken füllen',
     'topics.typeDictation': 'Diktat',
+    'topics.typeReading': 'Lesen',
+    'topics.book': 'Buch',
+    'topics.questionCount': 'Anzahl der Fragen',
+    'topics.fragmentWords': 'Textlänge (Wörter)',
+    'topics.bookStartParagraph': 'Startabsatz',
+    'topics.bookStartParagraphHelp': 'Absatznummer, ab der der Text beginnt (Titelseiten überspringen). 0 = erster Absatz.',
+    'topics.booksEmpty': 'Keine Bücher in Storage gefunden. Laden Sie .epub-Dateien in den Ordner books/ hoch (siehe docs/DEPLOY_STORAGE_RULES.md).',
+    'topics.booksLoadFailed': 'Bücherliste konnte nicht aus Storage geladen werden.',
     
     // Students
     'students.title': 'Schüler',
@@ -569,6 +595,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'validation.shortNameRequired': 'Kurzer Name ist erforderlich',
     'validation.taskDescriptionRequired': 'Aufgabenbeschreibung ist erforderlich',
     'validation.promptRequired': 'Eingabeaufforderung ist erforderlich',
+    'validation.bookRequired': 'Bitte wählen Sie ein Buch',
     'validation.enterPromptFirst': 'Bitte geben Sie zuerst eine Eingabeaufforderung ein',
     'validation.enterShortNameFirst': 'Bitte geben Sie zuerst einen kurzen Namen ein',
     

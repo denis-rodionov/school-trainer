@@ -7,9 +7,46 @@
 
 import { Topic, Exercise, TopicType } from '../types';
 import { createDictationMarkdown } from '../utils/dictationParser';
+import { createReadingMarkdown } from '../utils/readingParser';
+import { selectFragment, previousParagraph } from '../utils/readingFragment';
 import { generateExercises } from './ai';
 import { generateDictationText } from './aiDictation';
 import { generateAudioFromText } from './textToSpeech';
+import { generateReadingQuestions } from './aiReading';
+import { downloadBook } from './bookStorage';
+import { loadBookParagraphs } from './epub';
+
+// Map subjects to language codes used for AI/TTS content.
+const LANGUAGE_MAP: Record<string, string> = {
+  english: 'en',
+  german: 'de',
+  math: 'en',
+};
+
+const languageForTopic = (topic: Topic): string =>
+  LANGUAGE_MAP[topic.subject.toLowerCase()] || 'en';
+
+/**
+ * Whether a topic has enough configuration to generate exercises.
+ * READING topics need a book; other types need a prompt.
+ */
+export const isTopicReady = (topic: Topic | undefined | null): boolean => {
+  if (!topic) return false;
+  if (topic.type === 'READING') return Boolean(topic.bookId);
+  return Boolean(topic.prompt);
+};
+
+/** Effective READING cursor: never before topic.bookStartParagraph. */
+export const readingPositionFor = (
+  readingPosition: number | undefined,
+  bookStartParagraph?: number
+): number => {
+  const start = Math.max(0, bookStartParagraph ?? 0);
+  if (typeof readingPosition === 'number' && readingPosition >= start) {
+    return readingPosition;
+  }
+  return start;
+};
 
 /**
  * Generate exercises for a topic based on its type
@@ -17,17 +54,21 @@ import { generateAudioFromText } from './textToSpeech';
  * @param topic - Topic to generate exercises for
  * @param count - Number of exercises to generate
  * @param onProgress - Optional callback for progress updates (current, total)
+ * @param readingPosition - READING only: paragraph index to start generating from
  * @returns Promise resolving to array of exercises ready to be saved
  */
 export const generateExerciseForTopic = async (
   topic: Topic,
   count: number,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  readingPosition: number = 0
 ): Promise<Omit<Exercise, 'id'>[]> => {
   const topicType: TopicType = topic.type || 'FILL_GAPS';
 
   if (topicType === 'DICTATION') {
     return generateDictationExercises(topic, count, onProgress);
+  } else if (topicType === 'READING') {
+    return generateReadingExercises(topic, count, readingPosition, onProgress);
   } else {
     return generateFillGapsExercises(topic, count, onProgress);
   }
@@ -117,6 +158,90 @@ async function generateDictationExercises(
   }
 
   // Final progress update
+  if (onProgress) {
+    onProgress(count, count);
+  }
+
+  return exercises;
+}
+
+/**
+ * Generate READING exercises.
+ * Flow: download book bytes (Firebase SDK) -> load+flatten paragraphs -> for each exercise,
+ * select the next paragraph-aligned fragment from a moving cursor, generate MCQ
+ * questions, and build reading markdown. Consecutive exercises advance through the book.
+ */
+async function generateReadingExercises(
+  topic: Topic,
+  count: number,
+  readingPosition: number,
+  onProgress?: (current: number, total: number) => void
+): Promise<Omit<Exercise, 'id'>[]> {
+  if (!topic.bookId) {
+    throw new Error(`Reading topic "${topic.shortName}" has no book configured.`);
+  }
+
+  const targetWords = topic.fragmentWords && topic.fragmentWords > 0 ? topic.fragmentWords : 200;
+  const questionCount = topic.questionCount && topic.questionCount > 0 ? topic.questionCount : 3;
+  const language = languageForTopic(topic);
+
+  const buffer = await downloadBook(topic.bookId);
+  const paragraphs = await loadBookParagraphs(topic.bookId, buffer);
+
+  const exercises: Omit<Exercise, 'id'>[] = [];
+  let cursor = Math.max(0, readingPosition);
+
+  for (let i = 1; i <= count; i++) {
+    try {
+      if (onProgress) {
+        onProgress(i - 1, count);
+      }
+
+      if (cursor >= paragraphs.length) {
+        // Reached the end of the book; stop generating further fragments.
+        break;
+      }
+
+      const fragment = selectFragment(paragraphs, cursor, targetWords);
+      const prev = previousParagraph(paragraphs, fragment.startIndex, topic.bookStartParagraph);
+
+      const questions = await generateReadingQuestions({
+        fragment: fragment.text,
+        questionCount,
+        language,
+      });
+
+      const markdown = createReadingMarkdown({
+        bookId: topic.bookId,
+        prevParagraph: prev,
+        fragmentParagraphs: fragment.paragraphs,
+        questions,
+        startIndex: fragment.startIndex,
+        endIndex: fragment.endIndex,
+      });
+
+      exercises.push({
+        topicId: topic.id,
+        topicShortName: topic.shortName,
+        markdown,
+        order: i - 1,
+      });
+
+      cursor = fragment.endIndex;
+
+      if (i < count) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch (error: any) {
+      console.error(`Failed to generate reading exercise ${i}:`, error);
+      throw new Error(`Exercise ${i} of ${count} for topic "${topic.shortName}": ${error.message}`);
+    }
+  }
+
+  if (exercises.length === 0) {
+    throw new Error(`No reading content available for topic "${topic.shortName}" (end of book reached).`);
+  }
+
   if (onProgress) {
     onProgress(count, count);
   }

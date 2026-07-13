@@ -20,7 +20,7 @@ import {
   Grid,
 } from '@mui/material';
 import { Science, Refresh, Translate } from '@mui/icons-material';
-import { Topic, Subject, TopicType } from '../../types';
+import { Topic, Subject, TopicType, Exercise } from '../../types';
 import { createTopic, updateTopic, getTopics } from '../../services/topics';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -28,9 +28,13 @@ import { translateSubject, getSubjectConstant } from '../../i18n/translations';
 import { AVAILABLE_SUBJECTS } from '../../constants/subjects';
 import { generateExercise } from '../../services/ai';
 import { generateDictationText } from '../../services/aiDictation';
+import { generateExerciseForTopic } from '../../services/exerciseGenerator';
+import { listBooks, BookInfo } from '../../services/bookStorage';
 import { parseMarkdown, extractCorrectAnswers } from '../../utils/markdownParser';
 import { extractDictationAnswer, extractAudioUrl } from '../../utils/dictationParser';
+import { isReadingMarkdown } from '../../utils/readingParser';
 import { translateToGerman } from '../../services/translation';
+import ReadingExerciseBlock from '../Worksheet/ReadingExerciseBlock';
 
 interface TopicFormProps {
   open: boolean;
@@ -49,12 +53,25 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
   const [taskDescription, setTaskDescription] = useState('');
   const [prompt, setPrompt] = useState('');
   const [defaultExerciseCount, setDefaultExerciseCount] = useState<number>(3);
+  const [bookId, setBookId] = useState<string>('');
+  const [questionCount, setQuestionCount] = useState<number>(3);
+  const [fragmentWords, setFragmentWords] = useState<number>(200);
+  const [bookStartParagraph, setBookStartParagraph] = useState<number>(0);
+  const [availableBooks, setAvailableBooks] = useState<BookInfo[]>([]);
+  const [booksLoading, setBooksLoading] = useState(false);
+  const [booksLoadError, setBooksLoadError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
   const [testExercise, setTestExercise] = useState<string | null>(null);
   const [testExerciseMarkdown, setTestExerciseMarkdown] = useState<string | null>(null);
   const [testingExercise, setTestingExercise] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
+
+  const clearTestPreview = () => {
+    setTestExercise(null);
+    setTestExerciseMarkdown(null);
+    setTestError(null);
+  };
   
   // Translation state
   const [originalValues, setOriginalValues] = useState<{
@@ -91,6 +108,10 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       setTaskDescription(topic.taskDescription);
       setPrompt(topic.prompt);
       setDefaultExerciseCount(topic.defaultExerciseCount ?? 3);
+      setBookId(topic.bookId ?? '');
+      setQuestionCount(topic.questionCount ?? 3);
+      setFragmentWords(topic.fragmentWords ?? 200);
+      setBookStartParagraph(topic.bookStartParagraph ?? 0);
     } else {
       setSubject('');
       setSubjectInputValue('');
@@ -99,6 +120,10 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       setTaskDescription('');
       setPrompt('');
       setDefaultExerciseCount(3);
+      setBookId('');
+      setQuestionCount(3);
+      setFragmentWords(200);
+      setBookStartParagraph(0);
     }
     setErrors({});
     setTestExercise(null);
@@ -106,6 +131,10 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     setTestError(null);
     setTranslatedField(null);
     setOriginalValues({ shortName: '', taskDescription: '', prompt: '' });
+    if (!open) {
+      setAvailableBooks([]);
+      setBooksLoadError(null);
+    }
   }, [topic, open, language]);
   
   // Update input value when language changes but subject stays the same
@@ -114,6 +143,36 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       setSubjectInputValue(translateSubject(subject, language));
     }
   }, [language, subject]);
+
+  // Load available books from Storage when a READING topic is being configured.
+  useEffect(() => {
+    if (!open || topicType !== 'READING') {
+      return;
+    }
+    let cancelled = false;
+    setBooksLoading(true);
+    setBooksLoadError(null);
+    listBooks()
+      .then((books) => {
+        if (cancelled) return;
+        setAvailableBooks(books);
+        if (books.length === 0) {
+          setBooksLoadError(t('topics.booksEmpty'));
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Failed to load books:', err);
+        setAvailableBooks([]);
+        setBooksLoadError(err.message || t('topics.booksLoadFailed'));
+      })
+      .finally(() => {
+        if (!cancelled) setBooksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, topicType, t]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -130,7 +189,11 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       newErrors.taskDescription = t('validation.taskDescriptionRequired');
     }
 
-    if (!prompt.trim()) {
+    if (topicType === 'READING') {
+      if (!bookId) {
+        newErrors.bookId = t('validation.bookRequired');
+      }
+    } else if (!prompt.trim()) {
       newErrors.prompt = t('validation.promptRequired');
     }
 
@@ -184,13 +247,18 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
   };
 
   const handleTest = async () => {
-    if (!prompt.trim()) {
-      setTestError('Please enter a prompt first');
+    if (!shortName.trim()) {
+      setTestError('Please enter a short name first');
       return;
     }
 
-    if (!shortName.trim()) {
-      setTestError('Please enter a short name first');
+    if (topicType === 'READING') {
+      if (!bookId) {
+        setTestError('Please choose a book first');
+        return;
+      }
+    } else if (!prompt.trim()) {
+      setTestError('Please enter a prompt first');
       return;
     }
 
@@ -201,7 +269,31 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
       let resultMarkdown: string;
       let displayText: string;
 
-      if (topicType === 'DICTATION') {
+      if (topicType === 'READING') {
+        // Test preview always starts at bookStartParagraph — never uses student reading progress.
+        const previewTopic = {
+          id: 'preview',
+          subject,
+          shortName: shortName.trim(),
+          taskDescription: taskDescription.trim(),
+          prompt: '',
+          createdBy: currentUser?.uid ?? 'preview',
+          type: 'READING' as TopicType,
+          bookId,
+          questionCount,
+          fragmentWords,
+          bookStartParagraph,
+        } as Topic;
+
+        const generated = await generateExerciseForTopic(
+          previewTopic,
+          1,
+          undefined,
+          bookStartParagraph
+        );
+        resultMarkdown = generated[0]?.markdown ?? '';
+        displayText = '';
+      } else if (topicType === 'DICTATION') {
         // For dictation, generate plain text (no gaps)
         const dictationText = await generateDictationText({
           prompt: prompt.trim(),
@@ -256,24 +348,26 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
     }
 
     try {
+      const readingFields =
+        topicType === 'READING'
+          ? { bookId, questionCount, fragmentWords, bookStartParagraph }
+          : {};
+      const commonFields = {
+        subject,
+        type: topicType,
+        shortName: shortName.trim(),
+        taskDescription: taskDescription.trim(),
+        prompt: topicType === 'READING' ? '' : prompt.trim(),
+        defaultExerciseCount,
+        ...readingFields,
+      };
+
       if (topic) {
-        await updateTopic(topic.id, {
-          subject,
-          type: topicType,
-          shortName: shortName.trim(),
-          taskDescription: taskDescription.trim(),
-          prompt: prompt.trim(),
-          defaultExerciseCount,
-        });
+        await updateTopic(topic.id, commonFields);
       } else {
         await createTopic({
-          subject,
-          type: topicType,
-          shortName: shortName.trim(),
-          taskDescription: taskDescription.trim(),
-          prompt: prompt.trim(),
+          ...commonFields,
           createdBy: currentUser.uid,
-          defaultExerciseCount,
         });
       }
       onSave();
@@ -344,6 +438,7 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
                 >
                   <MenuItem value="FILL_GAPS">{t('topics.typeFillGaps')}</MenuItem>
                   <MenuItem value="DICTATION">{t('topics.typeDictation')}</MenuItem>
+                  <MenuItem value="READING">{t('topics.typeReading')}</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -399,36 +494,118 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
               </Button>
             </Grid>
 
-            <Grid item xs={12} sm={10}>
-              <TextField
-                label={t('topics.prompt')}
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value);
-                  setTestExercise(null);
-                  setTestExerciseMarkdown(null);
-                  setTestError(null);
-                }}
-                required
-                error={!!errors.prompt}
-                helperText={errors.prompt}
-                multiline
-                rows={3}
-                fullWidth
-              />
-            </Grid>
-            <Grid item xs={12} sm={2}>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={translating.prompt ? <CircularProgress size={16} /> : translatedField === 'prompt' ? <Refresh /> : <Translate />}
-                onClick={translatedField === 'prompt' ? handleRevert : () => handleTranslate('prompt')}
-                disabled={translating.prompt || (!prompt.trim() && translatedField !== 'prompt')}
-                fullWidth
-              >
-                {translatedField === 'prompt' ? t('topics.revert') : t('topics.translate')}
-              </Button>
-            </Grid>
+            {topicType !== 'READING' && (
+              <>
+                <Grid item xs={12} sm={10}>
+                  <TextField
+                    label={t('topics.prompt')}
+                    value={prompt}
+                    onChange={(e) => {
+                      setPrompt(e.target.value);
+                      setTestExercise(null);
+                      setTestExerciseMarkdown(null);
+                      setTestError(null);
+                    }}
+                    required
+                    error={!!errors.prompt}
+                    helperText={errors.prompt}
+                    multiline
+                    rows={3}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={translating.prompt ? <CircularProgress size={16} /> : translatedField === 'prompt' ? <Refresh /> : <Translate />}
+                    onClick={translatedField === 'prompt' ? handleRevert : () => handleTranslate('prompt')}
+                    disabled={translating.prompt || (!prompt.trim() && translatedField !== 'prompt')}
+                    fullWidth
+                  >
+                    {translatedField === 'prompt' ? t('topics.revert') : t('topics.translate')}
+                  </Button>
+                </Grid>
+              </>
+            )}
+
+            {topicType === 'READING' && (
+              <>
+                <Grid item xs={12} sm={10}>
+                  <FormControl fullWidth error={!!errors.bookId}>
+                    <InputLabel>{t('topics.book')}</InputLabel>
+                    <Select
+                      value={bookId}
+                      label={t('topics.book')}
+                      onChange={(e) => {
+                        setBookId(e.target.value);
+                        clearTestPreview();
+                      }}
+                      disabled={booksLoading}
+                    >
+                      {availableBooks.map((book) => (
+                        <MenuItem key={book.id} value={book.id}>
+                          {book.title}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  {booksLoading && <CircularProgress size={24} sx={{ mt: 1 }} />}
+                </Grid>
+
+                {booksLoadError && (
+                  <Grid item xs={12}>
+                    <Alert severity="warning" sx={{ mt: 0 }}>
+                      {booksLoadError}
+                    </Alert>
+                  </Grid>
+                )}
+
+                <Grid item xs={12} sm={5}>
+                  <TextField
+                    label={t('topics.questionCount')}
+                    type="number"
+                    value={questionCount}
+                    onChange={(e) => {
+                      setQuestionCount(Math.max(1, Number(e.target.value) || 1));
+                      clearTestPreview();
+                    }}
+                    inputProps={{ min: 1, max: 10 }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} sm={5}>
+                  <TextField
+                    label={t('topics.fragmentWords')}
+                    type="number"
+                    value={fragmentWords}
+                    onChange={(e) => {
+                      setFragmentWords(Math.max(20, Number(e.target.value) || 20));
+                      clearTestPreview();
+                    }}
+                    inputProps={{ min: 20, step: 10 }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} sm={5}>
+                  <TextField
+                    label={t('topics.bookStartParagraph')}
+                    type="number"
+                    value={bookStartParagraph}
+                    onChange={(e) => {
+                      setBookStartParagraph(Math.max(0, Number(e.target.value) || 0));
+                      clearTestPreview();
+                    }}
+                    inputProps={{ min: 0, step: 1 }}
+                    helperText={t('topics.bookStartParagraphHelp')}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}></Grid>
+              </>
+            )}
           </Grid>
 
           <Grid container spacing={2}>
@@ -457,7 +634,11 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
               variant="outlined"
               startIcon={testingExercise ? <CircularProgress size={16} /> : <Science />}
               onClick={handleTest}
-              disabled={testingExercise || !prompt.trim() || !shortName.trim()}
+              disabled={
+                testingExercise ||
+                !shortName.trim() ||
+                (topicType === 'READING' ? !bookId : !prompt.trim())
+              }
               fullWidth
             >
               {testingExercise ? t('assignments.generating') : testExercise ? t('topics.regenerateTest') : t('topics.testExercise')}
@@ -494,6 +675,26 @@ const TopicForm: React.FC<TopicFormProps> = ({ open, onClose, onSave, topic }) =
 
 // Component to preview test exercise
 const TestExercisePreview: React.FC<{ markdown: string; topicType: TopicType }> = ({ markdown, topicType }) => {
+  // Reading exercise preview
+  if (topicType === 'READING' || isReadingMarkdown(markdown)) {
+    const previewExercise: Exercise = {
+      id: 'preview',
+      topicId: 'preview',
+      topicShortName: 'preview',
+      markdown,
+      order: 0,
+    };
+    return (
+      <ReadingExerciseBlock
+        exercise={previewExercise}
+        answers={[]}
+        onAnswerChange={() => {}}
+        isReadOnly
+        showCorrectAnswers
+      />
+    );
+  }
+
   // Check if this is a dictation exercise
   const isDictation = topicType === 'DICTATION' || markdown.includes('<audio') || markdown.includes('<textarea');
 

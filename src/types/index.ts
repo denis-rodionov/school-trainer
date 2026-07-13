@@ -8,7 +8,7 @@ export type WorksheetStatus = 'pending' | 'completed';
 
 export type Language = 'en' | 'ru' | 'de';
 
-export type TopicType = 'FILL_GAPS' | 'DICTATION';
+export type TopicType = 'FILL_GAPS' | 'DICTATION' | 'READING';
 
 export interface User {
   uid: string;
@@ -35,6 +35,9 @@ export interface SubjectData {
 export interface TopicAssignment {
   topicId: string;
   count: number;
+  // READING only: paragraph index of the next unread paragraph in the book.
+  // Advanced when a worksheet containing this topic's reading exercises is submitted.
+  readingPosition?: number;
 }
 
 export interface SubjectStatistics {
@@ -54,6 +57,11 @@ export interface Topic {
   createdBy: string;
   defaultExerciseCount?: number;
   type?: TopicType; // Optional, defaults to 'FILL_GAPS' for backward compatibility
+  // READING only configuration
+  bookId?: string; // Id of the book in Firebase Storage (books/{bookId}.epub)
+  questionCount?: number; // Number of multiple-choice questions per fragment
+  fragmentWords?: number; // Approximate fragment length in words
+  bookStartParagraph?: number; // Paragraph index where story content begins (skip title/metadata)
 }
 
 export interface Worksheet {
