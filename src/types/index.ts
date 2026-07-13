@@ -38,6 +38,8 @@ export interface TopicAssignment {
   // READING only: paragraph index of the next unread paragraph in the book.
   // Advanced when a worksheet containing this topic's reading exercises is submitted.
   readingPosition?: number;
+  // Assignments sharing the same value are alternatives; student picks one at generation.
+  optionGroup?: number;
 }
 
 export interface SubjectStatistics {

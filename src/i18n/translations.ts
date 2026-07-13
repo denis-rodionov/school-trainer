@@ -182,7 +182,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'assignments.generate': 'Generate',
     'assignments.generating': 'Generating...',
     'assignments.exercisesOf': 'exercises',
-    
+    'assignments.optionGroupTooltip': 'Alternative exercise (choose one)',
+    'optionGroup.title': 'Choose an exercise',
+    'optionGroup.confirm': 'Continue',
+
     // Topics Screen
     'topics.noTopicsYet': 'No topics yet. Create your first topic to get started.',
     'topics.noTopicsForSubject': 'No {subject} topics yet',
@@ -405,7 +408,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'assignments.generate': 'Создать',
     'assignments.generating': 'Создание...',
     'assignments.exercisesOf': 'упражнений',
-    
+    'assignments.optionGroupTooltip': 'Альтернативное упражнение (выбрать одно)',
+    'optionGroup.title': 'Выберите упражнение',
+    'optionGroup.confirm': 'Продолжить',
+
     // Topics Screen
     'topics.noTopicsYet': 'Пока нет тем. Создайте первую тему, чтобы начать.',
     'topics.noTopicsForSubject': 'Пока нет тем по {subject}',
@@ -628,7 +634,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'assignments.generate': 'Erstellen',
     'assignments.generating': 'Wird erstellt...',
     'assignments.exercisesOf': 'Übungen',
-    
+    'assignments.optionGroupTooltip': 'Alternative Übung (eine auswählen)',
+    'optionGroup.title': 'Übung auswählen',
+    'optionGroup.confirm': 'Weiter',
+
     // Topics Screen
     'topics.noTopicsYet': 'Noch keine Themen. Erstellen Sie Ihr erstes Thema, um zu beginnen.',
     'topics.noTopicsForSubject': 'Noch keine {subject}-Themen',

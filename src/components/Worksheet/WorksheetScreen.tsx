@@ -26,7 +26,7 @@ import {
   createWorksheet,
 } from '../../services/worksheets';
 import { getTopic } from '../../services/topics';
-import { Worksheet, Exercise } from '../../types';
+import { Worksheet, Exercise, Topic, TopicAssignment } from '../../types';
 import ExerciseBlock from './ExerciseBlock';
 import DictationExerciseBlock from './DictationExerciseBlock';
 import ReadingExerciseBlock from './ReadingExerciseBlock';
@@ -49,6 +49,10 @@ import { generateExerciseForTopic, isTopicReady, readingPositionFor } from '../.
 import { printWorksheet } from '../../services/printing';
 import { firestoreRead } from '../../utils/firestoreResilience';
 import { useOnFirestoreRecovery } from '../../hooks/useFirestoreRecovery';
+import {
+  getAssignmentsNeedingChoice,
+  resolveAssignmentsForGeneration,
+} from '../../utils/optionGroups';
 
 // Helper: check if an exercise is a dictation exercise (audio or dictation markdown structure)
 const isDictationExercise = (exercise: Exercise): boolean => {
@@ -102,6 +106,11 @@ const WorksheetScreen: React.FC = () => {
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [regenerationProgress, setRegenerationProgress] = useState<{ current: number; total: number } | null>(null);
+  const [optionGroupModalOpen, setOptionGroupModalOpen] = useState(false);
+  const [pendingChoiceGroups, setPendingChoiceGroups] = useState<Map<number, TopicAssignment[]> | null>(null);
+  const [selectedByGroup, setSelectedByGroup] = useState<Map<number, string>>(new Map());
+  const [regenerateTopicsMap, setRegenerateTopicsMap] = useState<Map<string, Topic> | null>(null);
+  const [regenerateAssignments, setRegenerateAssignments] = useState<TopicAssignment[] | null>(null);
   const [shouldGoToDashboard, setShouldGoToDashboard] = useState(false);
   const [trainerMarkedErrors, setTrainerMarkedErrors] = useState<Set<string>>(new Set()); // Track which exercises trainer marked as errors (by exercise ID)
   const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Total mistakes from first check (words/gaps), fixed for final score
@@ -636,119 +645,168 @@ const WorksheetScreen: React.FC = () => {
     }
   };
 
-  const handleRegenerate = async () => {
+  const runRegeneration = async (
+    assignmentsToGenerate: TopicAssignment[],
+    topicsForGeneration: Map<string, Topic>
+  ) => {
+    if (!worksheet || !worksheetId || !currentUser) return;
+
+    const subject = worksheet.subject;
+    const studentId = worksheet.studentId;
+
+    await deleteWorksheet(worksheetId);
+
+    const totalExercises = assignmentsToGenerate.reduce((sum, assignment) => {
+      const topic = topicsForGeneration.get(assignment.topicId);
+      return isTopicReady(topic) ? sum + assignment.count : sum;
+    }, 0);
+
+    const newExercises: Omit<Exercise, 'id'>[] = [];
+    let exerciseOrder = 0;
+    let currentExerciseIndex = 0;
+
+    for (const assignment of assignmentsToGenerate) {
+      const topic = topicsForGeneration.get(assignment.topicId);
+      if (!isTopicReady(topic) || !topic) continue;
+
+      const capturedExerciseIndex = currentExerciseIndex;
+      const capturedExerciseOrder = exerciseOrder;
+
+      try {
+        const generatedExercises = await generateExerciseForTopic(
+          topic,
+          assignment.count,
+          (current) => {
+            setRegenerationProgress({
+              current: capturedExerciseIndex + current,
+              total: totalExercises,
+            });
+          },
+          readingPositionFor(assignment.readingPosition, topic.bookStartParagraph)
+        );
+
+        generatedExercises.forEach((exercise) => {
+          newExercises.push({
+            ...exercise,
+            order: capturedExerciseOrder + newExercises.length,
+          });
+        });
+
+        currentExerciseIndex += assignment.count;
+        exerciseOrder = newExercises.length;
+      } catch (error: any) {
+        console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
+        const errorMessage = error.message || t('error.unknownError');
+        setRegenerateError(`${t('error.failedToGenerate')} "${topic.shortName}": ${errorMessage}`);
+        throw error;
+      }
+    }
+
+    if (newExercises.length === 0) {
+      setRegenerateError(t('error.noExercisesGenerated'));
+      return;
+    }
+
+    const newWorksheetId = await createWorksheet(studentId, subject, newExercises);
+    setRegenerationProgress(null);
+    setShouldGoToDashboard(true);
+    navigate(`/worksheet/${newWorksheetId}`);
+  };
+
+  const handleRegenerateConfirm = async () => {
     if (!worksheet || !worksheetId || worksheet.status !== 'pending' || !currentUser) return;
-    
+
     setConfirmDialogOpen(false);
 
     try {
-      setRegenerating(true);
       setRegenerateError(null);
-      
-      // Store subject and studentId before deletion
+
       const subject = worksheet.subject;
-      const studentId = worksheet.studentId; // Use the worksheet's studentId (works for both student and trainer)
-      
-      // Delete the current worksheet
-      await deleteWorksheet(worksheetId);
-      
-      // Get topic assignments for this subject (use studentId, not currentUser.uid)
+      const studentId = worksheet.studentId;
+
       const subjectData = await getSubjectData(studentId, subject);
       if (!subjectData || !subjectData.topicAssignments.length) {
         throw new Error(t('error.noAssignments'));
       }
 
-      // Load topics
-      const topicsMap = new Map<string, any>();
+      const topicsForGeneration = new Map<string, Topic>();
       for (const assignment of subjectData.topicAssignments) {
         const topic = await getTopic(assignment.topicId);
         if (topic) {
-          topicsMap.set(assignment.topicId, topic);
+          topicsForGeneration.set(assignment.topicId, topic);
         }
       }
 
-      // Calculate total number of exercises to generate
-      const totalExercises = subjectData.topicAssignments.reduce((sum, assignment) => {
-        const topic = topicsMap.get(assignment.topicId);
-        return isTopicReady(topic) ? sum + assignment.count : sum;
-      }, 0);
+      const choiceGroups = getAssignmentsNeedingChoice(
+        subjectData.topicAssignments,
+        topicsForGeneration,
+        isTopicReady
+      );
 
-      // Generate new exercises from topic assignments using AI
-      const exercises: Omit<Exercise, 'id'>[] = [];
-      let exerciseOrder = 0;
-      let currentExerciseIndex = 0;
-
-      for (const assignment of subjectData.topicAssignments) {
-        const topic = topicsMap.get(assignment.topicId);
-        if (!isTopicReady(topic) || !topic) continue;
-
-        // Capture current values for the callback
-        const capturedExerciseIndex = currentExerciseIndex;
-        const capturedExerciseOrder = exerciseOrder;
-
-        try {
-          // Generate exercises using the orchestrator (handles FILL_GAPS, DICTATION, READING)
-          const generatedExercises = await generateExerciseForTopic(
-            topic,
-            assignment.count,
-            (current, total) => {
-              // Update progress: capturedExerciseIndex + current exercises completed for this topic
-              setRegenerationProgress({
-                current: capturedExerciseIndex + current,
-                total: totalExercises,
-              });
-            },
-            readingPositionFor(assignment.readingPosition, topic.bookStartParagraph)
-          );
-
-          // Add generated exercises (already in correct format)
-          generatedExercises.forEach((exercise) => {
-            exercises.push({
-              ...exercise,
-              order: capturedExerciseOrder + exercises.length,
-            });
-          });
-          
-          // Update current exercise index after completing this topic
-          currentExerciseIndex += assignment.count;
-          exerciseOrder = exercises.length;
-        } catch (error: any) {
-          console.error(`Failed to generate exercises for topic ${topic.shortName}:`, error);
-          const errorMessage = error.message || t('error.unknownError');
-          setRegenerateError(`${t('error.failedToGenerate')} "${topic.shortName}": ${errorMessage}`);
-          throw error; // Stop worksheet creation
-        }
-      }
-
-      if (exercises.length === 0) {
-        setRegenerateError(t('error.noExercisesGenerated'));
+      if (choiceGroups.size > 0) {
+        setRegenerateTopicsMap(topicsForGeneration);
+        setRegenerateAssignments(subjectData.topicAssignments);
+        setSelectedByGroup(new Map());
+        setPendingChoiceGroups(choiceGroups);
+        setOptionGroupModalOpen(true);
         return;
       }
 
-      // Create new worksheet (use studentId, not currentUser.uid, so it works for trainers too)
-      const newWorksheetId = await createWorksheet(studentId, subject, exercises);
-      
-      // Reset progress
-      setRegenerationProgress(null);
-      
-      // Mark that we should go to dashboard on back (since old worksheet was deleted)
-      setShouldGoToDashboard(true);
-      
-      // Navigate to the new worksheet
-      navigate(`/worksheet/${newWorksheetId}`);
+      setRegenerating(true);
+      await runRegeneration(subjectData.topicAssignments, topicsForGeneration);
     } catch (err: any) {
       console.error('Failed to regenerate worksheet:', err);
-      // Show error but stay on the page
       if (!regenerateError) {
         setRegenerateError(err.message || t('error.failedToRegenerateWorksheet'));
       }
-      
-      // Reset progress on error
       setRegenerationProgress(null);
     } finally {
       setRegenerating(false);
     }
   };
+
+  const handleOptionGroupRegenerateConfirm = async () => {
+    if (!regenerateAssignments || !regenerateTopicsMap || !pendingChoiceGroups) return;
+
+    const topicsForGeneration = regenerateTopicsMap;
+    const effectiveAssignments = resolveAssignmentsForGeneration(
+      regenerateAssignments,
+      topicsForGeneration,
+      isTopicReady,
+      selectedByGroup
+    );
+
+    setOptionGroupModalOpen(false);
+    setPendingChoiceGroups(null);
+    setRegenerateAssignments(null);
+    setRegenerateTopicsMap(null);
+
+    try {
+      setRegenerating(true);
+      setRegenerateError(null);
+      await runRegeneration(effectiveAssignments, topicsForGeneration);
+    } catch (err: any) {
+      console.error('Failed to regenerate worksheet:', err);
+      if (!regenerateError) {
+        setRegenerateError(err.message || t('error.failedToRegenerateWorksheet'));
+      }
+      setRegenerationProgress(null);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const handleOptionGroupModalClose = () => {
+    setOptionGroupModalOpen(false);
+    setPendingChoiceGroups(null);
+    setRegenerateAssignments(null);
+    setRegenerateTopicsMap(null);
+    setSelectedByGroup(new Map());
+  };
+
+  const allChoiceGroupsSelected =
+    pendingChoiceGroups != null &&
+    Array.from(pendingChoiceGroups.keys()).every((group) => selectedByGroup.has(group));
 
   // Group exercises by topic
   const exercisesByTopic = exercises.reduce((acc, exercise) => {
@@ -1006,12 +1064,54 @@ const WorksheetScreen: React.FC = () => {
             {t('common.cancel')}
           </Button>
           <Button
-            onClick={handleRegenerate}
+            onClick={() => void handleRegenerateConfirm()}
             variant="contained"
             color="primary"
             disabled={regenerating}
           >
             {t('worksheet.regenerate')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={optionGroupModalOpen} onClose={handleOptionGroupModalClose} maxWidth="sm" fullWidth>
+        <DialogTitle>{t('optionGroup.title')}</DialogTitle>
+        <DialogContent>
+          {pendingChoiceGroups &&
+            Array.from(pendingChoiceGroups.entries()).map(([group, groupAssignments]) => (
+              <Box key={group} sx={{ mb: 2 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                  {groupAssignments.map((groupAssignment) => {
+                    const groupTopic = regenerateTopicsMap?.get(groupAssignment.topicId);
+                    const isSelected = selectedByGroup.get(group) === groupAssignment.topicId;
+                    return (
+                      <Button
+                        key={groupAssignment.topicId}
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        onClick={() =>
+                          setSelectedByGroup((prev) => {
+                            const next = new Map(prev);
+                            next.set(group, groupAssignment.topicId);
+                            return next;
+                          })
+                        }
+                      >
+                        {groupTopic?.shortName || groupAssignment.topicId}
+                      </Button>
+                    );
+                  })}
+                </Box>
+              </Box>
+            ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleOptionGroupModalClose}>{t('common.cancel')}</Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleOptionGroupRegenerateConfirm()}
+            disabled={!allChoiceGroupsSelected || regenerating}
+          >
+            {t('optionGroup.confirm')}
           </Button>
         </DialogActions>
       </Dialog>
