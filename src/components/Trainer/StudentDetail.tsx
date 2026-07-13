@@ -57,13 +57,16 @@ const StudentDetail: React.FC = () => {
     }
   };
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
     if (!studentId) return;
 
     const generation = ++loadGenerationRef.current;
+    const silent = options?.silent ?? false;
 
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError('');
 
       const userSubjects = await firestoreRead(() => getUserSubjects(studentId));
@@ -138,7 +141,7 @@ const StudentDetail: React.FC = () => {
   };
 
   const handleAssignSave = () => {
-    void loadData();
+    void loadData({ silent: true });
   };
 
   if (loading) {

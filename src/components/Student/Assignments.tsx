@@ -68,8 +68,12 @@ const Assignments: React.FC<AssignmentsProps> = ({
   const [aiError, setAiError] = useState<string | null>(null);
   const subjectName = translateSubject(subject, language);
 
+  const assignmentTopicIdsKey =
+    subjectData?.topicAssignments?.map((assignment) => assignment.topicId).join('\0') ?? '';
+
   const loadTopics = useCallback(async () => {
-    if (!subjectData || !subjectData.topicAssignments || !subjectData.topicAssignments.length) {
+    const topicIds = assignmentTopicIdsKey ? assignmentTopicIdsKey.split('\0') : [];
+    if (!topicIds.length) {
       setTopics(new Map());
       setLoading(false);
       setLoadError('');
@@ -82,13 +86,13 @@ const Assignments: React.FC<AssignmentsProps> = ({
 
     try {
       const loadedTopics = await firestoreRead(() =>
-        Promise.all(subjectData.topicAssignments.map((assignment) => getTopic(assignment.topicId)))
+        Promise.all(topicIds.map((topicId) => getTopic(topicId)))
       );
       const topicMap = new Map<string, Topic>();
 
       loadedTopics.forEach((topic, index) => {
         if (topic) {
-          topicMap.set(subjectData.topicAssignments[index].topicId, topic);
+          topicMap.set(topicIds[index], topic);
         }
       });
 
@@ -98,7 +102,7 @@ const Assignments: React.FC<AssignmentsProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [subjectData, t]);
+  }, [assignmentTopicIdsKey, t]);
 
   useEffect(() => {
     void loadTopics();
