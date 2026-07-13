@@ -1,6 +1,6 @@
 export const FIRESTORE_RECOVERY_EVENT = 'firestore-recovery';
 
-export const DEFAULT_TIMEOUT_MS = 2000;
+export const DEFAULT_TIMEOUT_MS = 12000;
 const RETRY_DELAY_MS = 500;
 
 export class FirestoreTimeoutError extends Error {

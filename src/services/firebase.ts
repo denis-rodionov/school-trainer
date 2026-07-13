@@ -3,7 +3,6 @@ import {
   getAuth,
   initializeAuth,
   browserLocalPersistence,
-  browserPopupRedirectResolver,
 } from 'firebase/auth';
 import { initializeFirestore, memoryLocalCache } from 'firebase/firestore';
 
@@ -19,10 +18,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 function createAuth() {
+  // Email/password only: omit popupRedirectResolver so Firebase never loads the
+  // cross-origin __/auth/iframe. That iframe is only needed for OAuth popup/redirect
+  // sign-in, and Safari/WebKit tracking prevention blocks it, causing auth to hang.
   try {
     return initializeAuth(app, {
       persistence: browserLocalPersistence,
-      popupRedirectResolver: browserPopupRedirectResolver,
     });
   } catch {
     // Hot reload: Auth already initialized for this app instance
@@ -33,7 +34,11 @@ function createAuth() {
 export const auth = createAuth();
 export const db = initializeFirestore(app, {
   localCache: memoryLocalCache(),
-  experimentalAutoDetectLongPolling: true,
+  // Force long polling instead of WebChannel streaming. Safari/WebKit blocks the
+  // streaming Listen/channel fetch ("access control checks"), and auto-detect does
+  // not reliably fall back, causing reads to hang. Long polling uses plain requests
+  // that Safari allows.
+  experimentalForceLongPolling: true,
 });
 
 export default app;
