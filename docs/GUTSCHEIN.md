@@ -57,7 +57,8 @@ On the **first** grade calculation (no stored grade yet), no Gutscheins are spen
 - Calendar weeks start on **Monday** (ISO week).
 - On the **student's first dashboard load** in a new week, add `defaultWeekly` to `balance`.
 - Refill runs **once per week** per subject (tracked via `lastWeeklyRefillWeek`).
-- Refill always adds the default amount, even if no Gutscheins were spent the previous week.
+- Refill requires **at least one completed worksheet in the rolling last 7 days** for that subject — inactive students do not accumulate weekly passes.
+- Refill always adds the default amount when eligible, even if no Gutscheins were spent the previous week.
 - Refill does **not** run when a trainer views the student — only when the student opens their dashboard.
 
 ## Trainer actions
@@ -86,6 +87,7 @@ Students see their current Gutschein balance (🎟️) next to the grade on each
 | Scenario | Behavior |
 |----------|----------|
 | `defaultWeekly` is 0 | Weekly refill adds nothing; trainer can still grant bonuses |
+| No worksheet in last 7 days | Weekly default passes are not added (bonus passes from trainer still work) |
 | Grade improves | Raw grade used; no Gutscheins spent |
 | Multiple missed days at once | Each grade step costs one Gutschein (up to balance) |
 | Existing subjects without `gutscheins` field | Defaults to `{ balance: 0, defaultWeekly: 0 }` on read |

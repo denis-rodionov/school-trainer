@@ -1,5 +1,30 @@
-import { getISOWeek, getISOWeekYear } from 'date-fns';
+import { differenceInDays, getISOWeek, getISOWeekYear } from 'date-fns';
 import { SubjectGutscheins } from '../types';
+
+type CompletedAt = Date | { toDate?: () => Date } | null | undefined;
+
+function toDate(value: CompletedAt): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'object' && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+  return new Date(value as Date);
+}
+
+/**
+ * True when at least one worksheet was completed within the rolling last 7 days.
+ */
+export function hasWorksheetCompletedInLast7Days(
+  completedWorksheets: { completedAt?: CompletedAt }[],
+  now: Date = new Date()
+): boolean {
+  return completedWorksheets.some((worksheet) => {
+    const completedAt = toDate(worksheet.completedAt);
+    if (!completedAt) return false;
+    return differenceInDays(now, completedAt) <= 7;
+  });
+}
 
 export interface GutscheinGradeResult {
   adjustedGrade: number | null;

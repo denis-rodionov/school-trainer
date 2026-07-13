@@ -1,5 +1,9 @@
 import { getSubjectData, updateSubjectGutscheins, normalizeGutscheins } from './users';
-import { applyWeeklyRefill } from '../utils/gutscheinCalculator';
+import { getCompletedWorksheetsBySubject } from './worksheets';
+import {
+  applyWeeklyRefill,
+  hasWorksheetCompletedInLast7Days,
+} from '../utils/gutscheinCalculator';
 import { Subject } from '../types';
 
 export const processWeeklyRefillIfNeeded = async (
@@ -11,12 +15,18 @@ export const processWeeklyRefillIfNeeded = async (
     return false;
   }
 
+  const now = new Date();
+  const completedWorksheets = await getCompletedWorksheetsBySubject(studentId, subject, 50);
+  if (!hasWorksheetCompletedInLast7Days(completedWorksheets, now)) {
+    return false;
+  }
+
   const gutscheins = normalizeGutscheins(subjectData.gutscheins);
   const refill = applyWeeklyRefill(
     gutscheins.balance,
     gutscheins.defaultWeekly,
     gutscheins.lastWeeklyRefillWeek,
-    new Date()
+    now
   );
 
   if (

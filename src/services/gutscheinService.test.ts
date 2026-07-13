@@ -7,7 +7,13 @@ jest.mock('./users', () => {
   };
 });
 
+jest.mock('./worksheets', () => ({
+  getCompletedWorksheetsBySubject: jest.fn(),
+}));
+
+import { Timestamp } from 'firebase/firestore';
 import { getSubjectData, updateSubjectGutscheins } from './users';
+import { getCompletedWorksheetsBySubject } from './worksheets';
 import {
   addBonusGutscheins,
   processWeeklyRefillIfNeeded,
@@ -19,9 +25,24 @@ const mockGetSubjectData = getSubjectData as jest.MockedFunction<typeof getSubje
 const mockUpdateSubjectGutscheins = updateSubjectGutscheins as jest.MockedFunction<
   typeof updateSubjectGutscheins
 >;
+const mockGetCompletedWorksheetsBySubject =
+  getCompletedWorksheetsBySubject as jest.MockedFunction<
+    typeof getCompletedWorksheetsBySubject
+  >;
 
 const studentId = 'student-1';
 const subject = 'math';
+
+function recentWorksheet() {
+  return {
+    id: 'w1',
+    studentId,
+    subject,
+    status: 'completed' as const,
+    createdAt: Timestamp.fromDate(new Date('2026-06-28T10:00:00')),
+    completedAt: Timestamp.fromDate(new Date('2026-06-28T10:00:00')),
+  };
+}
 
 function subjectWithGutscheins(
   gutscheins: SubjectData['gutscheins']
@@ -39,6 +60,7 @@ describe('gutscheinService', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-06-29T10:00:00'));
+    mockGetCompletedWorksheetsBySubject.mockResolvedValue([recentWorksheet()]);
   });
 
   afterEach(() => {
@@ -111,6 +133,39 @@ describe('gutscheinService', () => {
         defaultWeekly: 0,
         lastWeeklyRefillWeek: '2026-W27',
       });
+    });
+
+    it('does not add default weekly passes without a worksheet in the last 7 days', async () => {
+      mockGetSubjectData.mockResolvedValue(
+        subjectWithGutscheins({
+          balance: 1,
+          defaultWeekly: 2,
+          lastWeeklyRefillWeek: '2026-W26',
+        })
+      );
+      mockGetCompletedWorksheetsBySubject.mockResolvedValue([
+        {
+          ...recentWorksheet(),
+          completedAt: Timestamp.fromDate(new Date('2026-06-15T10:00:00')),
+        },
+      ]);
+
+      await expect(processWeeklyRefillIfNeeded(studentId, subject)).resolves.toBe(false);
+      expect(mockUpdateSubjectGutscheins).not.toHaveBeenCalled();
+    });
+
+    it('does not add default weekly passes when there are no completed worksheets', async () => {
+      mockGetSubjectData.mockResolvedValue(
+        subjectWithGutscheins({
+          balance: 0,
+          defaultWeekly: 2,
+          lastWeeklyRefillWeek: '2026-W26',
+        })
+      );
+      mockGetCompletedWorksheetsBySubject.mockResolvedValue([]);
+
+      await expect(processWeeklyRefillIfNeeded(studentId, subject)).resolves.toBe(false);
+      expect(mockUpdateSubjectGutscheins).not.toHaveBeenCalled();
     });
   });
 

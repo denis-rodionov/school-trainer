@@ -2,6 +2,7 @@ import {
   applyGutscheinsToGrade,
   applyWeeklyRefill,
   getIsoWeekKey,
+  hasWorksheetCompletedInLast7Days,
   needsWeeklyRefill,
   gutscheinsForFirestore,
 } from './gutscheinCalculator';
@@ -24,6 +25,32 @@ describe('gutscheinCalculator', () => {
 
     it('returns true in a new week', () => {
       expect(needsWeeklyRefill('2026-W26', new Date('2026-06-29'))).toBe(true);
+    });
+  });
+
+  describe('hasWorksheetCompletedInLast7Days', () => {
+    const now = new Date('2026-06-29T10:00:00');
+
+    it('returns true when a worksheet was completed within 7 days', () => {
+      expect(
+        hasWorksheetCompletedInLast7Days(
+          [{ completedAt: new Date('2026-06-27T10:00:00') }],
+          now
+        )
+      ).toBe(true);
+    });
+
+    it('returns false when the most recent worksheet is older than 7 days', () => {
+      expect(
+        hasWorksheetCompletedInLast7Days(
+          [{ completedAt: new Date('2026-06-20T10:00:00') }],
+          now
+        )
+      ).toBe(false);
+    });
+
+    it('returns false when there are no completed worksheets', () => {
+      expect(hasWorksheetCompletedInLast7Days([], now)).toBe(false);
     });
   });
 
