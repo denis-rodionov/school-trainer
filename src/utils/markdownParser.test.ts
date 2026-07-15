@@ -7,6 +7,8 @@ import {
   extractDraftAnswers,
   updateMarkdownWithDraftAnswers,
 } from './markdownParser';
+import { createDictationMarkdown, extractDictationAnswer } from './dictationParser';
+import { fuzzyMatchText, getWordLevelDifferences } from './dictationScoring';
 import {
   FILL_GAPS_MARKDOWN,
   MULTI_GAP_MARKDOWN,
@@ -99,6 +101,21 @@ describe('markdownParser', () => {
     it('clears value when draft is empty', () => {
       const updated = updateMarkdownWithDraftAnswers(markdownWithDraft, ['']);
       expect(extractDraftAnswers(updated)).toEqual(['']);
+    });
+
+    it('preserves dictation data-answer when saving textarea draft', () => {
+      const correct =
+        'Der kleine Fuchs Felix lebt im Wald. Er spielt gern mit seinen Geschwistern. Jeden Morgen sucht Felix Beeren und Pilze. Am Abend kuschelt er sich in seinen Baum.';
+      const markdown = createDictationMarkdown(correct, 'https://example.com/a.mp3');
+
+      const studentBau = correct.replace('Baum', 'Bau');
+      const withDraft = updateMarkdownWithDraftAnswers(markdown, [studentBau]);
+      expect(extractDictationAnswer(withDraft)).toBe(correct);
+      expect(extractDraftAnswers(withDraft)[0]).toBe(studentBau);
+      expect(getWordLevelDifferences(studentBau, extractDictationAnswer(withDraft))).toEqual([
+        { expected: 'Baum', actual: 'Bau' },
+      ]);
+      expect(fuzzyMatchText(correct, extractDictationAnswer(withDraft))).toBe(true);
     });
   });
 });

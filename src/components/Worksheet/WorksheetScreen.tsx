@@ -248,9 +248,6 @@ const WorksheetScreen: React.FC = () => {
           // Update markdown
           const updatedMarkdown = updateExerciseDraftMarkdown(currentExercise, exerciseDraftAnswers);
 
-          // Log before saving
-          console.log('saving exercise', updatedMarkdown);
-
           // Save asynchronously (don't await - component is unmounting)
           import('../../services/worksheets').then(({ updateExercise }) => {
             updateExercise(worksheet.id, currentExercise.id, {
@@ -265,10 +262,14 @@ const WorksheetScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run cleanup on unmount
 
+  const getAnswersSnapshot = (): string[] =>
+    answersRef.current.length === answers.length ? answersRef.current : answers;
+
   const handleAnswerChange = (index: number, value: string) => {
     if (isReadOnly) return;
     const newAnswers = [...answers];
     newAnswers[index] = value;
+    answersRef.current = newAnswers;
     setAnswers(newAnswers);
     // Clear error for this field if it was previously marked as error
     if (errors[index]) {
@@ -291,17 +292,13 @@ const WorksheetScreen: React.FC = () => {
       try {
         // Extract answers for this exercise
         const count = answerSlotCount(exercise);
+        const currentAnswers = getAnswersSnapshot();
         const exerciseDraftAnswers = isDictationExercise(exercise)
-          ? [answers[answerStartIndex] || '']
-          : answers.slice(answerStartIndex, answerStartIndex + count);
+          ? [currentAnswers[answerStartIndex] || '']
+          : currentAnswers.slice(answerStartIndex, answerStartIndex + count);
 
         // Update markdown with draft answers
         const updatedMarkdown = updateExerciseDraftMarkdown(exercise, exerciseDraftAnswers);
-
-        // Log before saving
-        console.log('saving exercise', updatedMarkdown);
-        console.log('draft answers:', exerciseDraftAnswers);
-        console.log('original markdown:', exercise.markdown);
 
         // Save to database
         const { updateExercise } = await import('../../services/worksheets');
@@ -320,7 +317,7 @@ const WorksheetScreen: React.FC = () => {
     setCurrentFocusedExerciseId(exerciseId);
   };
 
-  const saveAllExerciseDrafts = async () => {
+  const saveAllExerciseDrafts = async (answersToSave: string[] = getAnswersSnapshot()) => {
     if (!worksheet) return;
 
     const { updateExercise } = await import('../../services/worksheets');
@@ -329,8 +326,8 @@ const WorksheetScreen: React.FC = () => {
     for (const exercise of exercises) {
       const count = answerSlotCount(exercise);
       const exerciseDraftAnswers = isDictationExercise(exercise)
-        ? [answers[answerIndex] || '']
-        : answers.slice(answerIndex, answerIndex + count);
+        ? [answersToSave[answerIndex] || '']
+        : answersToSave.slice(answerIndex, answerIndex + count);
       answerIndex += count;
 
       const updatedMarkdown = updateExerciseDraftMarkdown(exercise, exerciseDraftAnswers);
@@ -346,6 +343,8 @@ const WorksheetScreen: React.FC = () => {
 
     if (!worksheet || !currentUser) return;
 
+    const currentAnswers = getAnswersSnapshot();
+
     // Calculate errors and check correctness
     const newErrors: boolean[] = [];
     const exercisesWithMistakesSet = new Set<string>();
@@ -359,7 +358,7 @@ const WorksheetScreen: React.FC = () => {
       if (isReadingExercise(exercise)) {
         const questions = extractReadingQuestions(exercise.markdown ?? '');
         questions.forEach((question) => {
-          const userAnswer = answers[globalIndex] ?? '';
+          const userAnswer = currentAnswers[globalIndex] ?? '';
           const isError = userAnswer === '' || parseInt(userAnswer, 10) !== question.correctIndex;
           newErrors[globalIndex] = isError;
 
@@ -372,7 +371,7 @@ const WorksheetScreen: React.FC = () => {
         });
       } else if (isDictationExercise(exercise)) {
         const correctAnswer = extractDictationAnswer(exercise.markdown);
-        const userAnswer = answers[globalIndex] || '';
+        const userAnswer = currentAnswers[globalIndex] || '';
         const isError = !fuzzyMatchText(userAnswer, correctAnswer);
 
         newErrors[globalIndex] = isError;
@@ -386,7 +385,7 @@ const WorksheetScreen: React.FC = () => {
       } else {
         const correctAnswers = extractCorrectAnswers(exercise.markdown ?? '');
         correctAnswers.forEach((correctAnswer) => {
-          const userAnswer = answers[globalIndex]?.trim().toLowerCase();
+          const userAnswer = currentAnswers[globalIndex]?.trim().toLowerCase();
           const correct = correctAnswer.trim().toLowerCase();
           const isError = userAnswer !== correct;
           newErrors[globalIndex] = isError;
@@ -411,6 +410,18 @@ const WorksheetScreen: React.FC = () => {
     const cumulativeMistakes = (mistakeCount ?? 0) + totalMistakes;
     setMistakeCount(cumulativeMistakes);
 
+    if (!isTrainer && worksheet.status === 'pending') {
+      try {
+        setSaving(true);
+        await saveAllExerciseDrafts(currentAnswers);
+      } catch (err: any) {
+        alert(err.message || t('error.failedToSubmitWorksheet'));
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+
     if (isFirstCheck) {
       setExercisesWithMistakesIds(new Set(exercisesWithMistakesSet));
 
@@ -420,7 +431,7 @@ const WorksheetScreen: React.FC = () => {
         if (exercisesWithMistakesSet.has(exercise.id)) {
           const exerciseAnswers: string[] = [];
           for (let k = 0; k < count; k++) {
-            exerciseAnswers.push(answers[tempGlobalIndex] || '');
+            exerciseAnswers.push(currentAnswers[tempGlobalIndex] || '');
             tempGlobalIndex++;
           }
 
@@ -435,16 +446,6 @@ const WorksheetScreen: React.FC = () => {
           tempGlobalIndex += count;
         }
       });
-
-      try {
-        setSaving(true);
-        await saveAllExerciseDrafts();
-      } catch (err: any) {
-        alert(err.message || t('error.failedToSubmitWorksheet'));
-        return;
-      } finally {
-        setSaving(false);
-      }
 
       if (!allCorrect) {
         return;
