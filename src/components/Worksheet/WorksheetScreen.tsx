@@ -113,7 +113,7 @@ const WorksheetScreen: React.FC = () => {
   const [regenerateAssignments, setRegenerateAssignments] = useState<TopicAssignment[] | null>(null);
   const [shouldGoToDashboard, setShouldGoToDashboard] = useState(false);
   const [trainerMarkedErrors, setTrainerMarkedErrors] = useState<Set<string>>(new Set()); // Track which exercises trainer marked as errors (by exercise ID)
-  const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Total mistakes from first check (words/gaps), fixed for final score
+  const [mistakeCount, setMistakeCount] = useState<number | null>(null); // Cumulative mistakes across all checks (words/gaps/questions)
   const [exercisesWithMistakesIds, setExercisesWithMistakesIds] = useState<Set<string>>(new Set()); // Track which exercises had mistakes on first submit (for updating attempts/userInput)
   const [currentFocusedExerciseId, setCurrentFocusedExerciseId] = useState<string | null>(null); // Track which exercise is currently focused for auto-save
   const answersRef = useRef<string[]>([]); // Ref to store current answers for unmount save
@@ -408,10 +408,10 @@ const WorksheetScreen: React.FC = () => {
     setErrors(newErrors);
 
     const isFirstCheck = mistakeCount === null;
-    const scoreMistakes = isFirstCheck ? totalMistakes : mistakeCount;
+    const cumulativeMistakes = (mistakeCount ?? 0) + totalMistakes;
+    setMistakeCount(cumulativeMistakes);
 
     if (isFirstCheck) {
-      setMistakeCount(totalMistakes);
       setExercisesWithMistakesIds(new Set(exercisesWithMistakesSet));
 
       let tempGlobalIndex = 0;
@@ -456,7 +456,7 @@ const WorksheetScreen: React.FC = () => {
     try {
       setSaving(true);
 
-      const score = computeWorksheetScoreFromMistakes(scoreMistakes ?? 0);
+      const score = computeWorksheetScoreFromMistakes(cumulativeMistakes);
       const exercisesMarkedOnFirstCheck = isFirstCheck
         ? exercisesWithMistakesSet
         : exercisesWithMistakesIds;

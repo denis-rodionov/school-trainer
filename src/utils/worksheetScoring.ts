@@ -1,4 +1,4 @@
-/** Percentage deducted from the worksheet score for each mistake on the first check. */
+/** Percentage deducted from the worksheet score for each mistake on every check. */
 export const MISTAKE_SCORE_PENALTY_PERCENT = 5;
 
 /**
@@ -10,7 +10,8 @@ export function computeWorksheetScore(correctCount: number, totalExercises: numb
 }
 
 /**
- * Compute worksheet score after the first check, deducting a fixed percent per mistake.
+ * Compute worksheet score from cumulative mistakes across checks,
+ * deducting a fixed percent per mistake.
  */
 export function computeWorksheetScoreFromMistakes(
   mistakeCount: number,
